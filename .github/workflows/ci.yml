@@ -1,0 +1,197 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up JDK 8
+      uses: actions/setup-java@v3
+      with:
+        java-version: '8'
+        distribution: 'temurin'
+        cache: 'sbt'
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '12'
+        cache: 'npm'
+        cache-dependency-path: frontend/package.json
+
+    - name: Install Frontend Dependencies
+      working-directory: ./frontend
+      run: |
+        npm install -g bower grunt-cli
+        npm install
+        bower install
+
+    - name: Run Frontend Tests
+      working-directory: ./frontend
+      run: grunt test
+      continue-on-error: true
+
+    - name: Run Backend Tests
+      run: sbt test
+
+    - name: Dependency Check
+      uses: dependency-check/Dependency-Check_Action@main
+      id: dependency-check
+      continue-on-error: true
+      with:
+        project: 'TheHive'
+        path: '.'
+        format: 'HTML'
+        out: 'reports'
+        args: >
+          --suppression suppressions.xml
+          --failOnCVSS 9
+          --enableExperimental
+
+    - name: Upload Dependency Check Report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: dependency-check-report
+        path: reports/dependency-check-report.html
+
+    - name: Build Package
+      run: sbt package
+
+    - name: Build Docker Image
+      run: sbt docker:publishLocal
+
+    - name: Generate SBOM
+      uses: anchore/sbom-action@v0
+      with:
+        image: thehiveproject/thehive:4.1.24-1
+        format: cyclonedx-json
+        artifact-name: sbom.json
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      continue-on-error: true
+      with:
+        image-ref: 'thehiveproject/thehive:4.1.24-1'
+        format: 'table'
+        exit-code: '1'
+        ignore-unfixed: true
+        vuln-type: 'os,library'
+        severity: 'CRITICAL'
+        output: 'trivy-results.txt'
+        trivyignores: .trivyignore
+
+    - name: Print Trivy Report
+      if: always()
+      run: cat trivy-results.txt
+
+    - name: Upload Trivy Report
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: trivy-report
+        path: trivy-results.txt
+
+    - name: Save Docker Image
+      run: docker save thehiveproject/thehive:4.1.24-1 | gzip > thehive-image.tar.gz
+
+    - name: Upload Docker Image
+      uses: actions/upload-artifact@v3
+      with:
+        name: docker-image
+        path: thehive-image.tar.gz
+
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: |
+          **/target/test-reports/
+          **/target/streams/test/
+
+    - name: Upload Build Artifacts
+      if: success()
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: |
+          **/target/**/*.jar
+          **/target/**/*.zip
+          **/target/**/*.tgz
+
+  smoke-test:
+    needs: build
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download Docker Image
+        uses: actions/download-artifact@v3
+        with:
+          name: docker-image
+
+      - name: Load Docker Image
+        run: |
+          gunzip -c thehive-image.tar.gz | docker load
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r tests/smoke_api/requirements.txt
+          cd tests/smoke_ui && npm install && npx playwright install --with-deps chromium
+
+      - name: Start Stack
+        env:
+          THEHIVE_IMAGE: thehiveproject/thehive:4.1.24-1
+        working-directory: tests/smoke_api
+        run: docker-compose -f docker-compose.test.yml up -d
+
+      - name: Wait for Stack
+        run: sleep 30
+
+      - name: Run API Smoke Tests
+        working-directory: tests/smoke_api
+        run: pytest test_smoke.py
+
+      - name: Run UI Smoke Tests
+        working-directory: tests/smoke_ui
+        run: npx playwright test
+
+      - name: Stop Stack
+        if: always()
+        working-directory: tests/smoke_api
+        run: |
+          docker-compose -f docker-compose.test.yml logs > ../../docker-logs.txt
+          docker-compose -f docker-compose.test.yml down
+
+      - name: Upload Docker Logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: docker-logs
+          path: docker-logs.txt
+
+      - name: Upload Playwright Report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: playwright-report
+          path: tests/smoke_ui/playwright-report/

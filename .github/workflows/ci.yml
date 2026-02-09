@@ -24,20 +24,14 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '12'
-        # cache: 'npm' removed to avoid dependency on lockfile existing at checkout time for legacy reasons in all envs
-        # cache-dependency-path: frontend/package-lock.json
+        # IMPORTANT: no cache for legacy stack
 
     - name: Install Frontend Dependencies
       working-directory: ./frontend
       run: |
         npm install -g bower grunt-cli
-        # Use npm ci if lockfile exists, else npm install
-        if [ -f package-lock.json ]; then
-          npm ci --legacy-peer-deps
-        else
-          npm install --legacy-peer-deps
-        fi
-        bower install
+        npm install --legacy-peer-deps
+        bower install --allow-root --config.interactive=false
 
     - name: Run Frontend Tests
       working-directory: ./frontend
@@ -74,7 +68,7 @@ jobs:
     - name: Build Docker Image
       run: sbt docker:publishLocal
 
-    - name: Generate SBOM
+    - name:YX Generate SBOM
       uses: anchore/sbom-action@v0
       with:
         image: thehiveproject/thehive:4.1.24-1
@@ -105,7 +99,7 @@ jobs:
         name: trivy-report
         path: trivy-results.txt
 
-    - name: Save Docker Image
+    - name:QN Save Docker Image
       run: docker save thehiveproject/thehive:4.1.24-1 | gzip > thehive-image.tar.gz
 
     - name: Upload Docker Image
@@ -157,6 +151,7 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '16'
+          # IMPORTANT: no cache for legacy stack
 
       - name: Install Dependencies
         run: |

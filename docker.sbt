@@ -24,15 +24,16 @@ mappings in Docker ~= (_.filterNot {
   case (_, filepath) => filepath == "/opt/thehive/conf/application.conf"
 })
 dockerCommands := Seq(
-  Cmd("FROM", "openjdk:8"),
+  Cmd("FROM", "eclipse-temurin:8u482-b08-jre-noble"),
   Cmd("LABEL", "MAINTAINER=\"TheHive Project <support@thehive-project.org>\"", "repository=\"https://github.com/TheHive-Project/TheHive\""),
   Cmd("WORKDIR", "/opt/thehive"),
   // format: off
   Cmd("RUN",
-    "apt", "update", "&&",
-    "apt", "upgrade", "-y", "&&",
-    "apt", "autoclean", "-y", "-q",  "&&",
-    "apt", "autoremove", "-y", "-q",  "&&",
+    "apt-get", "update", "&&",
+    "apt-get", "install", "-y", "curl", "&&",
+    "apt-get", "upgrade", "-y", "&&",
+    "apt-get", "autoclean", "-y", "-q",  "&&",
+    "apt-get", "autoremove", "-y", "-q",  "&&",
     "rm", "-rf", "/var/lib/apt/lists/*", "&&",
     "(", "type", "groupadd", "1>/dev/null", "2>&1", "&&",
       "groupadd", "-g", "1000", "thehive", "||",
@@ -49,6 +50,7 @@ dockerCommands := Seq(
   ExecCmd("RUN", "chmod", "+x", "/opt/thehive/bin/thehive", "/opt/thehive/entrypoint", "/opt/thehive/bin/cloner", "/opt/thehive/bin/migrate"),
   Cmd("RUN", "mkdir", "/data", "/opt/thp", "&&", "chown", "thehive:thehive", "/data", "/opt/thp"),
   Cmd("EXPOSE", "9000"),
+  Cmd("HEALTHCHECK", "--interval=30s", "--timeout=10s", "--retries=3", "CMD", "curl", "--fail", "http://localhost:9000/api/status", "||", "exit", "1"),
   Cmd("USER", "thehive"),
   ExecCmd("ENTRYPOINT", "/opt/thehive/entrypoint"),
   ExecCmd("CMD")

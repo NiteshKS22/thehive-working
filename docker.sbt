@@ -24,7 +24,7 @@ mappings in Docker ~= (_.filterNot {
   case (_, filepath) => filepath == "/opt/thehive/conf/application.conf"
 })
 dockerCommands := Seq(
-  Cmd("FROM", "eclipse-temurin:8-jre"),
+  Cmd("FROM", "eclipse-temurin:8u482-b08-jre-noble"),
   Cmd("LABEL", "MAINTAINER=\"TheHive Project <support@thehive-project.org>\"", "repository=\"https://github.com/TheHive-Project/TheHive\""),
   Cmd("WORKDIR", "/opt/thehive"),
   // format: off

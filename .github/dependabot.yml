@@ -3,14 +3,14 @@ updates:
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
       npm-dependencies:
         patterns:
           - "*"
     ignore:
       - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

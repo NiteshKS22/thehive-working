@@ -80,7 +80,7 @@ def main():
                     # Bulk Action
                     action = {
                         "_index": f"{INDEX_PREFIX}-{time.strftime('%Y.%m')}", # Monthly indices
-                        "_id": payload.get('fingerprint'), # Deterministic ID based on content
+                        "_id": payload.get('original_event_id'), # Use original_event_id to avoid overwriting distinct alerts with same fingerprint
                         "_source": doc
                     }
                     actions.append(action)

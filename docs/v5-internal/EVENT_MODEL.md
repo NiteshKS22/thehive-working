@@ -28,3 +28,38 @@ JSON Schema definitions for core events:
 ## Backward Compatibility with v4-LTS
 - v5 events map cleanly to v4 domain objects.
 - v4-LTS remains the source of truth until specific modules are fully strangled.
+
+## Correlation & Grouping Events (Phase 3D)
+
+### CorrelationGroupCreated
+- **Topic**: `correlation.group.created.v1`
+- **Payload**:
+  - `group_id`: Deterministic UUID/Hash based on key + time window.
+  - `correlation_key`: The key that triggered the grouping.
+  - `rule_id`, `rule_name`: Triggering rule metadata.
+  - `confidence`: LOW/MEDIUM/HIGH.
+  - `status`: OPEN.
+  - `first_seen`, `last_seen`: Epoch timestamps.
+  - `alert_count`: 1.
+  - `max_severity`: Severity of first alert.
+  - `tenant_id`: Mandatory tenant scope.
+
+### CorrelationGroupUpdated
+- **Topic**: `correlation.group.updated.v1`
+- **Payload**:
+  - `group_id`: Target group.
+  - `status`: Current status (e.g., OPEN).
+  - `last_seen`: Updated timestamp.
+  - `alert_count`: Updated count.
+  - `max_severity`: Updated severity.
+  - `rule_name`: Triggering rule name (for context).
+  - `tenant_id`: Mandatory tenant scope.
+
+### AlertLinkedToGroup
+- **Topic**: `correlation.alert.linked.v1`
+- **Payload**:
+  - `group_id`: Target group.
+  - `original_event_id`: ID of the alert being linked.
+  - `linked_at`: Timestamp of linking.
+  - `link_reason`: Explanation (e.g., "Rule: Same host").
+  - `tenant_id`: Mandatory tenant scope.

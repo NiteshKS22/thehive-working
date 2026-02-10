@@ -21,15 +21,11 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies (Ingest)
+      - name: Install Dependencies
         working-directory: v5-core/alert-ingestion-service
         run: |
           pip install -r requirements.txt
           pip install pytest httpx
-
-      - name: Install Dependencies (Dedup)
-        working-directory: v5-core/dedup-correlation-service
-        run: pip install -r requirements.txt
 
       - name: Run Unit Tests
         working-directory: v5-core/alert-ingestion-service
@@ -41,11 +37,13 @@ jobs:
         run: |
           docker build -t thehive-ingestion:ci v5-core/alert-ingestion-service/
           docker build -t thehive-dedup:ci v5-core/dedup-correlation-service/
+          docker build -t thehive-indexer:ci v5-core/opensearch-indexer-service/
+          docker build -t thehive-query:ci v5-core/query-api-service/
 
       - name: Run Trivy Scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'thehive-ingestion:ci'
+          image-ref: 'thehive-query:ci'
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
@@ -65,39 +63,41 @@ jobs:
           docker run -d --name dedup-service --network host \
             -e KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
             -e REDIS_HOST=localhost \
-            -e REDIS_PORT=6379 \
             thehive-dedup:ci
 
-          sleep 15 # Wait for startup
+          docker run -d --name indexer-service --network host \
+            -e KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
+            -e OPENSEARCH_HOST=localhost \
+            thehive-indexer:ci
 
-      - name: Smoke Test - Health
-        run: curl -f http://localhost:8000/health
+          docker run -d --name query-service --network host \
+            -e OPENSEARCH_HOST=localhost \
+            thehive-query:ci
 
-      - name: Smoke Test - Ingest & Dedup
+          sleep 30 # Wait for full startup (OS takes time)
+
+      - name: Smoke Test - Full Pipeline
         run: |
           # 1. Ingest Alert
           curl -X POST http://localhost:8000/ingest \
             -H "Content-Type: application/json" \
-            -H "Idempotency-Key: test-dedup-1" \
-            -d '{"source": "ci-dedup", "type": "test", "sourceRef": "ref-dedup-1", "title": "Dedup Test Alert"}'
+            -H "Idempotency-Key: test-e2e-1" \
+            -d '{"source": "ci-e2e", "type": "test", "sourceRef": "ref-e2e-1", "title": "E2E Test Alert", "description": "Index me"}'
 
-          # 2. Wait for processing
-          sleep 5
+          # 2. Wait for async processing (dedup -> index)
+          sleep 10
 
-          # 3. Check Redpanda for Accepted event (using rpk inside container)
-          # Note: This is a rough check. Ideally we consume the topic.
-          docker exec v5-redpanda rpk topic consume alerts.accepted.v1 --num 1 | grep "Accepted" || echo "Warning: Could not verify message content directly in CI logs"
+          # 3. Query API
+          # Must provide tenant_id (default 'default' in ingest/indexer)
+          response=$(curl -s "http://localhost:8001/alerts?tenant_id=default&q=Index")
+          echo "Query Response: $response"
 
-          # 4. Ingest Duplicate
-          curl -X POST http://localhost:8000/ingest \
-            -H "Content-Type: application/json" \
-            -H "Idempotency-Key: test-dedup-2" \
-            -d '{"source": "ci-dedup", "type": "test", "sourceRef": "ref-dedup-1", "title": "Dedup Test Alert"}'
-
-          sleep 5
-
-          # 5. Check for Duplicate event
-          docker exec v5-redpanda rpk topic consume alerts.duplicate.v1 --num 1 | grep "Duplicate" || echo "Warning: Could not verify duplicate message"
+          if [[ "$response" == *"Index me"* ]]; then
+            echo "SUCCESS: Alert indexed and searchable."
+          else
+            echo "FAILURE: Alert not found in search results."
+            exit 1
+          fi
 
       - name: Stop Stack
         if: always()

@@ -5,14 +5,12 @@
 |--------|--------|-------|
 | **Ingestion Latency** | < 200ms (P99) | Time from POST to Event Published ACK. |
 | **Dedup Latency** | < 10ms (P99) | Redis SETNX operation time. |
-| **End-to-End Latency** | < 500ms | Ingest -> Dedup -> Accepted Event. |
-| **Throughput** | > 1000 events/sec | Single instance, standard hardware. |
+| **Indexing Latency** | < 500ms (P95) | Time from Accepted Event to Searchable. |
+| **Query Latency** | < 200ms (P95) | Simple term query response time. |
+| **End-to-End Latency** | < 1s | Ingest -> Searchable. |
 
 ## Measuring
 ```bash
-# Redis Latency
-redis-cli --latency
-
-# Consumer Lag
-rpk group describe dedup-group-v1
+# Query Latency
+time curl "http://localhost:8001/alerts?q=test&tenant_id=default"
 ```

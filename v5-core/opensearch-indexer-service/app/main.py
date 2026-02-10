@@ -80,7 +80,7 @@ def main():
                     # Bulk Action
                     action = {
                         "_index": f"{INDEX_PREFIX}-{time.strftime('%Y.%m')}", # Monthly indices
-                        "_id": event.get('event_id'), # Idempotent Upsert
+                        "_id": payload.get('fingerprint'), # Deterministic ID based on content
                         "_source": doc
                     }
                     actions.append(action)

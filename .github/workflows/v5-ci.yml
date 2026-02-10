@@ -64,6 +64,16 @@ jobs:
         working-directory: v5-core/event-spine
         run: docker-compose up -d
 
+      - name: Wait for OpenSearch & Apply Template
+        run: |
+          echo "Waiting for OpenSearch..."
+          timeout 60s bash -c 'until curl -s http://localhost:9200/_cluster/health | grep -E "\"status\":\"(green|yellow)\""; do sleep 5; done'
+
+          echo "Applying Index Template..."
+          curl -X PUT "http://localhost:9200/_index_template/alerts_template" \
+            -H "Content-Type: application/json" \
+            -d @v5-core/opensearch-indexer-service/OPENSEARCH_INDEX_TEMPLATE.json
+
       - name: Start Services
         run: |
           docker run -d --name ingestion-service --network host \
@@ -84,7 +94,7 @@ jobs:
             -e OPENSEARCH_HOST=localhost \
             thehive-query:ci
 
-          sleep 30 # Wait for full startup (OS takes time)
+
 
       - name: Smoke Test - Full Pipeline
         run: |

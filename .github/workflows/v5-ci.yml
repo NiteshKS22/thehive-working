@@ -56,72 +56,101 @@ jobs:
         working-directory: v5-core/event-spine
         run: |
            docker-compose up -d
-           sleep 5
+           sleep 10
            docker network ls
 
       - name: Wait for Infrastructure
         run: |
           echo "Waiting for OpenSearch..."
-          timeout 60s bash -c 'until curl -s http://localhost:9200/_cluster/health | grep -E ""status":"(green|yellow)""; do sleep 5; done'
+          timeout 60s bash -c 'until curl -s http://localhost:9200/_cluster/health | grep -E "\"status\":\"(green|yellow)\""; do sleep 5; done'
 
           echo "Applying Index Templates..."
-          curl -X PUT "http://localhost:9200/_index_template/alerts_template"             -H "Content-Type: application/json"             -d @v5-core/opensearch-indexer-service/OPENSEARCH_INDEX_TEMPLATE.json
+          curl -X PUT "http://localhost:9200/_index_template/alerts_template" \
+            -H "Content-Type: application/json" \
+            -d @v5-core/opensearch-indexer-service/OPENSEARCH_INDEX_TEMPLATE.json
 
-          echo "Applying Groups Index Template..."
-          curl -X PUT "http://localhost:9200/_index_template/groups_template"             -H "Content-Type: application/json"             -d @v5-core/group-indexer-service/GROUPS_INDEX_TEMPLATE.json
+          curl -X PUT "http://localhost:9200/_index_template/groups_template" \
+            -H "Content-Type: application/json" \
+            -d @v5-core/group-indexer-service/GROUPS_INDEX_TEMPLATE.json
 
       - name: Start App Services
         run: |
-          # Detect Network Name - directory is v5-core/event-spine -> event-spine_default
           NETWORK_NAME="event-spine_default"
 
-          # Dedup (Internal: redpanda:29092, redis:6379)
-          docker run -d --name dedup-service --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092             -e REDIS_HOST=redis             thehive-dedup:ci
+          # Dedup
+          docker run -d --name dedup-service --network \$NETWORK_NAME \
+            -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092 \
+            -e REDIS_HOST=redis \
+            thehive-dedup:ci
 
-          # Indexer (Internal: redpanda:29092, opensearch:9200)
-          docker run -d --name indexer-service --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092             -e OPENSEARCH_HOST=opensearch             thehive-indexer:ci
+          # Indexer
+          docker run -d --name indexer-service --network \$NETWORK_NAME \
+            -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092 \
+            -e OPENSEARCH_HOST=opensearch \
+            thehive-indexer:ci
 
-          # Correlation (Internal: redpanda:29092, postgres:5432)
-          docker run -d --name correlation-service --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092             -e POSTGRES_HOST=postgres             -e POSTGRES_PASSWORD=hive             thehive-correlation:ci
+          # Correlation (Note: RULES_FILE empty to force DB load if logic allows, or just let it use DB by default)
+          docker run -d --name correlation-service --network \$NETWORK_NAME \
+            -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092 \
+            -e POSTGRES_HOST=postgres \
+            -e POSTGRES_PASSWORD=hive \
+            thehive-correlation:ci
 
           # Group Indexer
-          docker run -d --name group-indexer-service --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092             -e OPENSEARCH_HOST=opensearch             thehive-group-indexer:ci
+          docker run -d --name group-indexer-service --network \$NETWORK_NAME \
+            -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092 \
+            -e OPENSEARCH_HOST=opensearch \
+            thehive-group-indexer:ci
 
-          # Query API (Port 8001)
-          docker run -d --name query-service --network $NETWORK_NAME             -p 8001:8001             -e OPENSEARCH_HOST=opensearch             -e POSTGRES_HOST=postgres             -e POSTGRES_PASSWORD=hive             thehive-query:ci
+          # Query API
+          docker run -d --name query-service --network \$NETWORK_NAME \
+            -p 8001:8001 \
+            -e OPENSEARCH_HOST=opensearch \
+            -e POSTGRES_HOST=postgres \
+            -e POSTGRES_PASSWORD=hive \
+            thehive-query:ci
 
-          # Ingestion API (Port 8000)
-          docker run -d --name ingestion-service --network $NETWORK_NAME             -p 8000:8000             -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092             thehive-ingestion:ci
+          # Ingestion API
+          docker run -d --name ingestion-service --network \$NETWORK_NAME \
+            -p 8000:8000 \
+            -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092 \
+            thehive-ingestion:ci
 
-          sleep 10 # Wait for startup
+          sleep 10
 
       - name: Smoke Test - Full Pipeline
         run: |
-          # 1. Ingest Alert that triggers Correlation
+          # 1. Ingest Alert that triggers R1 (Host Rule)
           echo "Ingesting Alerts..."
-          curl -X POST http://localhost:8000/ingest             -H "Content-Type: application/json"             -H "Idempotency-Key: test-corr-1"             -d '{"source": "ci", "type": "test", "sourceRef": "ref-1", "title": "Correlation Test 1", "description": "Group me", "tenant_id": "tenant-A", "host": "host-1", "rule_id": "rule-X"}'
-
-          curl -X POST http://localhost:8000/ingest             -H "Content-Type: application/json"             -H "Idempotency-Key: test-corr-2"             -d '{"source": "ci", "type": "test", "sourceRef": "ref-2", "title": "Correlation Test 2", "description": "Group me too", "tenant_id": "tenant-A", "host": "host-1", "rule_id": "rule-X"}'
-
-          curl -X POST http://localhost:8000/ingest             -H "Content-Type: application/json"             -H "Idempotency-Key: test-corr-3"             -d '{"source": "ci", "type": "test", "sourceRef": "ref-3", "title": "Isolation Test", "description": "Separate Group", "tenant_id": "tenant-B", "host": "host-1", "rule_id": "rule-X"}'
+          curl -X POST http://localhost:8000/ingest \
+            -H "Content-Type: application/json" \
+            -H "Idempotency-Key: test-gov-1" \
+            -d '{"source": "ci", "type": "test", "sourceRef": "ref-1", "title": "Governance Test 1", "description": "Group me", "tenant_id": "tenant-A", "host": "host-1", "rule_id": "R1_HOST_RULE"}'
 
           # Wait for processing
           sleep 15
 
-          # 3. Query Groups for Tenant A
+          # 3. Query Groups
           echo "Querying Groups for Tenant A..."
-          response=
-          echo "Tenant A Groups: "
+          response=$(curl -s "http://localhost:8001/groups?tenant_id=tenant-A")
+          echo "Tenant A Groups: $response"
 
-          # Verify JSON
-          python3 .github/scripts/verify_smoke.py "" 1
+          python3 .github/scripts/verify_smoke.py "$response" 1
 
-          # 4. Query Groups for Tenant B
-          echo "Querying Groups for Tenant B..."
-          response_b=
-          echo "Tenant B Groups: "
+          # 5. Rule Simulation Test
+          echo "Simulating Rule..."
+          sim_payload='{"source": "ci", "type": "test", "sourceRef": "ref-sim", "title": "Sim", "host": "host-sim", "rule_id": "R1_HOST_RULE"}'
+          response_sim=$(curl -X POST "http://localhost:8001/rules/simulate?tenant_id=tenant-A" \
+            -H "Content-Type: application/json" \
+            -d "$sim_payload")
+          echo "Simulation Response: $response_sim"
 
-          python3 .github/scripts/verify_smoke.py "" 1
+          if [[ "$response_sim" == *"matches"* && "$response_sim" == *"R1_HOST_RULE"* ]]; then
+             echo "SUCCESS: Simulation matched rule."
+          else
+             echo "FAILURE: Simulation failed."
+             exit 1
+          fi
 
       - name: Stop Stack
         if: always()

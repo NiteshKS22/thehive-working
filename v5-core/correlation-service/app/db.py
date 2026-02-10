@@ -1,7 +1,7 @@
 import psycopg2
 import logging
 import os
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 
 logger = logging.getLogger("correlation-db")
 
@@ -34,7 +34,6 @@ class Database:
         try:
             with self.conn.cursor() as cur:
                 # 1. Ensure Group Exists (Idempotent Insert)
-                # We do NOT increment count here. We just ensure record exists.
                 insert_group_query = """
                 INSERT INTO correlation_groups (
                     tenant_id, group_id, correlation_key, rule_id, rule_name, confidence, status,
@@ -82,10 +81,6 @@ class Database:
                     if row:
                         new_count, new_severity = row
 
-                # If group existed and link existed (replay), we don't update stats.
-                # If group existed and link is new, we updated stats.
-                # If group is new, stats are initial (1, severity).
-
                 self.conn.commit()
                 return is_new_group, is_new_link, new_count, new_severity
 
@@ -93,6 +88,35 @@ class Database:
             self.conn.rollback()
             logger.error(f"Process correlation failed: {e}")
             raise
+
+    def fetch_rules(self) -> List[Dict]:
+        """
+        Fetch all active rules from correlation_rules table.
+        """
+        query = "SELECT rule_id, rule_name, enabled, confidence, window_minutes, correlation_key_template, required_fields FROM correlation_rules WHERE enabled = TRUE"
+        try:
+            # Reconnect if closed?
+            if self.conn.closed:
+                self._connect()
+
+            with self.conn.cursor() as cur:
+                cur.execute(query)
+                rows = cur.fetchall()
+                rules = []
+                for r in rows:
+                    rules.append({
+                        "rule_id": r[0],
+                        "rule_name": r[1],
+                        "enabled": r[2],
+                        "confidence": r[3],
+                        "window_minutes": r[4],
+                        "correlation_key_template": r[5],
+                        "required_fields": r[6] # Postgres ARRAY -> Python list
+                    })
+                return rules
+        except Exception as e:
+            logger.error(f"Fetch rules failed: {e}")
+            return []
 
     def close(self):
         if self.conn:

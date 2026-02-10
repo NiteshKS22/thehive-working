@@ -5,6 +5,7 @@ import signal
 import sys
 import time
 import uuid
+import threading
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import KafkaError
 from rules import RuleEngine
@@ -16,8 +17,10 @@ INPUT_TOPIC = "alerts.accepted.v1"
 OUTPUT_TOPIC_GROUP_CREATED = "correlation.group.created.v1"
 OUTPUT_TOPIC_GROUP_UPDATED = "correlation.group.updated.v1"
 OUTPUT_TOPIC_ALERT_LINKED = "correlation.alert.linked.v1"
+OUTPUT_TOPIC_AUDIT = "correlation.audit.v1" # New audit topic
 DLQ_TOPIC = "correlation.dlq.v1"
 RULES_FILE = os.getenv("RULES_FILE", "rules.yaml")
+RULE_REFRESH_INTERVAL = int(os.getenv("RULE_REFRESH_INTERVAL", 60)) # Seconds
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 logger = logging.getLogger("correlation-worker")
@@ -32,13 +35,21 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
+def rule_reloader(engine):
+    while running:
+        time.sleep(RULE_REFRESH_INTERVAL)
+        try:
+            engine.reload_rules()
+        except Exception as e:
+            logger.error(f"Rule reload failed: {e}")
+
 def main():
-    logger.info("Starting Correlation Worker (Phase 3D)")
+    logger.info("Starting Correlation Worker (Phase 3D/3F)")
 
     # Initialize components
     try:
-        rules_engine = RuleEngine(RULES_FILE)
         db = Database()
+        rules_engine = RuleEngine(db_instance=db) # Load from DB
 
         consumer = KafkaConsumer(
             INPUT_TOPIC,
@@ -57,6 +68,10 @@ def main():
         logger.error(f"Initialization failed: {e}")
         sys.exit(1)
 
+    # Start reloader thread
+    reloader = threading.Thread(target=rule_reloader, args=(rules_engine,), daemon=True)
+    reloader.start()
+
     while running:
         try:
             msg_pack = consumer.poll(timeout_ms=1000)
@@ -73,7 +88,6 @@ def main():
                         timestamp = event.get('timestamp')
                         trace_id = event.get('trace_id')
 
-                        # Fix B: Proper DLQ Logic
                         if not tenant_id or not original_event_id:
                             logger.error(f"Missing required fields: {event}. Sending to DLQ.")
                             dlq_event = {
@@ -94,6 +108,9 @@ def main():
                         # Evaluate Rules
                         matches = rules_engine.evaluate(tenant_id, original_payload, timestamp)
 
+                        # Emit Audit for Evaluation (Optional: Too noisy? Maybe only if match found?)
+                        # For governance, let's log decisions if match found.
+
                         for match in matches:
                             group_id = match['group_id']
 
@@ -109,7 +126,6 @@ def main():
                                 "first_seen": timestamp,
                                 "last_seen": timestamp,
                                 "max_severity": match['max_severity'],
-                                # alert_count handled in DB logic
                             }
 
                             link_data = {
@@ -123,12 +139,9 @@ def main():
                             # Process in DB
                             is_new_group, is_new_link, new_count, new_severity = db.process_correlation(group_data, link_data)
 
-                            # Fix C: Add 'type' field to events
                             if is_new_group:
-                                # Emit Group Created
-                                # Payload should contain complete group info
                                 group_event_payload = group_data.copy()
-                                group_event_payload['alert_count'] = new_count # Should be 1
+                                group_event_payload['alert_count'] = new_count
                                 group_event_payload['max_severity'] = new_severity
 
                                 producer.send(OUTPUT_TOPIC_GROUP_CREATED, {
@@ -143,7 +156,6 @@ def main():
                                 logger.info(f"Group Created: {group_id}")
 
                             if is_new_link and not is_new_group:
-                                # Emit Group Updated with new stats
                                 producer.send(OUTPUT_TOPIC_GROUP_UPDATED, {
                                     "event_id": str(uuid.uuid4()),
                                     "type": "CorrelationGroupUpdated",
@@ -157,13 +169,12 @@ def main():
                                         "last_seen": timestamp,
                                         "alert_count": new_count,
                                         "max_severity": new_severity,
-                                        "rule_name": match['rule_name'] # Useful for indexing if needed
+                                        "rule_name": match['rule_name']
                                     }
                                 })
                                 logger.info(f"Group Updated: {group_id} (count={new_count})")
 
                             if is_new_link:
-                                # Emit Alert Linked
                                 producer.send(OUTPUT_TOPIC_ALERT_LINKED, {
                                     "event_id": str(uuid.uuid4()),
                                     "type": "AlertLinkedToGroup",
@@ -174,11 +185,25 @@ def main():
                                     "payload": link_data
                                 })
 
+                                # Emit Audit Event
+                                producer.send(OUTPUT_TOPIC_AUDIT, {
+                                    "event_id": str(uuid.uuid4()),
+                                    "type": "CorrelationDecision",
+                                    "trace_id": trace_id,
+                                    "tenant_id": tenant_id,
+                                    "timestamp": int(time.time() * 1000),
+                                    "schema_version": "1.0",
+                                    "payload": {
+                                        "decision": "linked",
+                                        "rule_id": match['rule_id'],
+                                        "group_id": group_id,
+                                        "alert_id": original_event_id,
+                                        "correlation_key": match['correlation_key']
+                                    }
+                                })
+
                     except Exception as e:
                         logger.error(f"Error processing message: {e}")
-                        # If critical failure (e.g. DB down), maybe retry?
-                        # But for loop, we catch per message.
-                        # DLQ for generic error?
                         try:
                             producer.send(DLQ_TOPIC, {
                                 "event_id": str(uuid.uuid4()),
@@ -188,10 +213,9 @@ def main():
                                 "payload": {"reason": f"Processing error: {str(e)}", "original_message": str(message.value)}
                             })
                         except:
-                            pass # If DLQ fails, we are in trouble.
+                            pass
                         continue
 
-            # Commit offsets
             if msg_pack:
                 producer.flush()
                 consumer.commit()

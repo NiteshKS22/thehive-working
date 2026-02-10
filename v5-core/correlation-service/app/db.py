@@ -66,13 +66,14 @@ class Database:
 
                 # 3. If Link is New AND Group was NOT new (it existed), we must update stats
                 if is_new_link and not is_new_group:
+                    # Fix: Use GREATEST logic for updated_at to handle out-of-order execution
                     update_group_query = """
                     UPDATE correlation_groups
                     SET
                         alert_count = alert_count + 1,
                         last_seen = GREATEST(last_seen, %(last_seen)s),
                         max_severity = GREATEST(max_severity, %(max_severity)s),
-                        updated_at = %(last_seen)s
+                        updated_at = GREATEST(updated_at, %(last_seen)s)
                     WHERE tenant_id = %(tenant_id)s AND group_id = %(group_id)s
                     RETURNING alert_count, max_severity;
                     """
@@ -95,7 +96,6 @@ class Database:
         """
         query = "SELECT rule_id, rule_name, enabled, confidence, window_minutes, correlation_key_template, required_fields FROM correlation_rules WHERE enabled = TRUE"
         try:
-            # Reconnect if closed?
             if self.conn.closed:
                 self._connect()
 
@@ -111,7 +111,7 @@ class Database:
                         "confidence": r[3],
                         "window_minutes": r[4],
                         "correlation_key_template": r[5],
-                        "required_fields": r[6] # Postgres ARRAY -> Python list
+                        "required_fields": r[6]
                     })
                 return rules
         except Exception as e:

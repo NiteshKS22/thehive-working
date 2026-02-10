@@ -102,14 +102,12 @@ def main():
                                     "original_message": event
                                 }
                             }
+                            # Send DLQ without key (random partition is fine for DLQ)
                             producer.send(DLQ_TOPIC, dlq_event)
                             continue
 
                         # Evaluate Rules
                         matches = rules_engine.evaluate(tenant_id, original_payload, timestamp)
-
-                        # Emit Audit for Evaluation (Optional: Too noisy? Maybe only if match found?)
-                        # For governance, let's log decisions if match found.
 
                         for match in matches:
                             group_id = match['group_id']
@@ -139,12 +137,15 @@ def main():
                             # Process in DB
                             is_new_group, is_new_link, new_count, new_severity = db.process_correlation(group_data, link_data)
 
+                            # Fix: Use key=group_id to ensure ordering
+                            key_bytes = group_id.encode('utf-8')
+
                             if is_new_group:
                                 group_event_payload = group_data.copy()
                                 group_event_payload['alert_count'] = new_count
                                 group_event_payload['max_severity'] = new_severity
 
-                                producer.send(OUTPUT_TOPIC_GROUP_CREATED, {
+                                producer.send(OUTPUT_TOPIC_GROUP_CREATED, key=key_bytes, value={
                                     "event_id": str(uuid.uuid4()),
                                     "type": "CorrelationGroupCreated",
                                     "trace_id": trace_id,
@@ -156,7 +157,7 @@ def main():
                                 logger.info(f"Group Created: {group_id}")
 
                             if is_new_link and not is_new_group:
-                                producer.send(OUTPUT_TOPIC_GROUP_UPDATED, {
+                                producer.send(OUTPUT_TOPIC_GROUP_UPDATED, key=key_bytes, value={
                                     "event_id": str(uuid.uuid4()),
                                     "type": "CorrelationGroupUpdated",
                                     "trace_id": trace_id,
@@ -175,7 +176,7 @@ def main():
                                 logger.info(f"Group Updated: {group_id} (count={new_count})")
 
                             if is_new_link:
-                                producer.send(OUTPUT_TOPIC_ALERT_LINKED, {
+                                producer.send(OUTPUT_TOPIC_ALERT_LINKED, key=key_bytes, value={
                                     "event_id": str(uuid.uuid4()),
                                     "type": "AlertLinkedToGroup",
                                     "trace_id": trace_id,
@@ -185,8 +186,7 @@ def main():
                                     "payload": link_data
                                 })
 
-                                # Emit Audit Event
-                                producer.send(OUTPUT_TOPIC_AUDIT, {
+                                producer.send(OUTPUT_TOPIC_AUDIT, key=key_bytes, value={
                                     "event_id": str(uuid.uuid4()),
                                     "type": "CorrelationDecision",
                                     "trace_id": trace_id,

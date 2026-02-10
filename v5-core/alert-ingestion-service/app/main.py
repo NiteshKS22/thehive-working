@@ -36,6 +36,7 @@ class Alert(BaseModel):
     sourceRef: str
     title: str
     description: Optional[str] = None
+    tenant_id: str = "default"
     severity: int = Field(default=2, ge=1, le=4)
     tlp: int = Field(default=2, ge=0, le=3)
     pap: int = Field(default=2, ge=0, le=3)
@@ -79,7 +80,7 @@ async def ingest_alert(
         "idempotency_key": idempotency_key,
         "timestamp": int(time.time() * 1000),
         "schema_version": "1.0",
-        "payload": alert.dict()
+        "payload": alert.model_dump()
     }
 
     # 3. Publish to Event Spine

@@ -21,17 +21,27 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
+      - name: Test Ingestion Service
         working-directory: v5-core/alert-ingestion-service
         run: |
           pip install -r requirements.txt
           pip install pytest httpx
+          if [ -d "tests" ]; then
+            pytest tests/
+          else
+            echo "No tests found."
+          fi
 
-      - name: Run Unit Tests
-        working-directory: v5-core/alert-ingestion-service
+      - name: Test Dedup Service
+        working-directory: v5-core/dedup-correlation-service
         run: |
-          echo "def test_placeholder(): assert True" > test_main.py
-          pytest
+          pip install -r requirements.txt
+          pip install pytest
+          if [ -d "tests" ]; then
+            pytest tests/
+          else
+            echo "No tests found."
+          fi
 
       - name: Build Docker Images
         run: |
@@ -79,10 +89,12 @@ jobs:
       - name: Smoke Test - Full Pipeline
         run: |
           # 1. Ingest Alert
+          # Note: Added tenant_id to payload as required by hardened dedup service
+          # Escape quotes properly for JSON in YAML
           curl -X POST http://localhost:8000/ingest \
             -H "Content-Type: application/json" \
             -H "Idempotency-Key: test-e2e-1" \
-            -d '{"source": "ci-e2e", "type": "test", "sourceRef": "ref-e2e-1", "title": "E2E Test Alert", "description": "Index me"}'
+            -d '{"source": "ci-e2e", "type": "test", "sourceRef": "ref-e2e-1", "title": "E2E Test Alert", "description": "Index me", "tenant_id": "default"}'
 
           # 2. Wait for async processing (dedup -> index)
           sleep 10

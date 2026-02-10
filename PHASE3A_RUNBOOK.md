@@ -1,9 +1,14 @@
-# Phase 3A Runbook
+# Phase 3A Runbook: Alert Ingestion Service
 
 ## Service: Alert Ingestion Service
 
 ### Overview
 Stateless FastAPI service receiving alerts via HTTP and publishing to Redpanda.
+
+### Hardening (Phase 3A/3B Update)
+- **Validation**: Strict Pydantic models (v2/v1 compat) used for request parsing.
+- **Tenant ID**: The `Alert` model now includes `tenant_id` (defaults to `default`). This is required for downstream dedup isolation.
+- **Idempotency**: `Idempotency-Key` header is propagated to event payload.
 
 ### Operations
 
@@ -32,6 +37,10 @@ docker run ... thehive-ingestion:latest
 #### "Ingestion Failed" (500)
 - Check logs for stack trace.
 - Ensure topic `alerts.ingest.v1` exists.
+
+#### "Missing Tenant ID" (Downstream Error)
+- Ensure the JSON payload includes `tenant_id` or verify the service defaults it correctly.
+- Check dedup service logs or DLQ topic `alerts.ingest.dlq.v1`.
 
 #### Rollback
 - v5 services are additive. Stop the container to stop v5 ingestion.

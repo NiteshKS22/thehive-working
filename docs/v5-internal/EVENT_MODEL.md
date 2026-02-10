@@ -9,6 +9,14 @@ JSON Schema definitions for core events:
 - `TaskUpdated`
 - `ActionExecuted`
 
+### Core Fields (Phase 3B Update)
+- **`event_id`**: UUIDv4.
+- **`trace_id`**: Distributed trace identifier.
+- **`timestamp`**: Epoch millis.
+- **`tenant_id`**: (Required) Identifies the tenant for multi-tenant isolation.
+- **`schema_version`**: "1.0".
+- **`payload`**: Domain-specific data (e.g., `Alert` object).
+
 ## Event Store Strategy
 - **Append-Only**: Immutable log of all domain events.
 - **Retention**: Configurable tiers (hot/warm/cold) for audit and replay.

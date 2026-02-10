@@ -73,8 +73,22 @@ def main():
                         timestamp = event.get('timestamp')
                         trace_id = event.get('trace_id')
 
+                        # Fix B: Proper DLQ Logic
                         if not tenant_id or not original_event_id:
-                            logger.error(f"Missing required fields: {event}")
+                            logger.error(f"Missing required fields: {event}. Sending to DLQ.")
+                            dlq_event = {
+                                "event_id": str(uuid.uuid4()),
+                                "type": "CorrelationDLQ",
+                                "tenant_id": tenant_id or "unknown",
+                                "trace_id": trace_id,
+                                "timestamp": int(time.time() * 1000),
+                                "schema_version": "1.0",
+                                "payload": {
+                                    "reason": "Missing tenant_id or original_event_id",
+                                    "original_message": event
+                                }
+                            }
+                            producer.send(DLQ_TOPIC, dlq_event)
                             continue
 
                         # Evaluate Rules
@@ -109,6 +123,7 @@ def main():
                             # Process in DB
                             is_new_group, is_new_link, new_count, new_severity = db.process_correlation(group_data, link_data)
 
+                            # Fix C: Add 'type' field to events
                             if is_new_group:
                                 # Emit Group Created
                                 # Payload should contain complete group info
@@ -118,6 +133,7 @@ def main():
 
                                 producer.send(OUTPUT_TOPIC_GROUP_CREATED, {
                                     "event_id": str(uuid.uuid4()),
+                                    "type": "CorrelationGroupCreated",
                                     "trace_id": trace_id,
                                     "tenant_id": tenant_id,
                                     "timestamp": int(time.time() * 1000),
@@ -130,6 +146,7 @@ def main():
                                 # Emit Group Updated with new stats
                                 producer.send(OUTPUT_TOPIC_GROUP_UPDATED, {
                                     "event_id": str(uuid.uuid4()),
+                                    "type": "CorrelationGroupUpdated",
                                     "trace_id": trace_id,
                                     "tenant_id": tenant_id,
                                     "timestamp": int(time.time() * 1000),
@@ -149,6 +166,7 @@ def main():
                                 # Emit Alert Linked
                                 producer.send(OUTPUT_TOPIC_ALERT_LINKED, {
                                     "event_id": str(uuid.uuid4()),
+                                    "type": "AlertLinkedToGroup",
                                     "trace_id": trace_id,
                                     "tenant_id": tenant_id,
                                     "timestamp": int(time.time() * 1000),
@@ -158,6 +176,19 @@ def main():
 
                     except Exception as e:
                         logger.error(f"Error processing message: {e}")
+                        # If critical failure (e.g. DB down), maybe retry?
+                        # But for loop, we catch per message.
+                        # DLQ for generic error?
+                        try:
+                            producer.send(DLQ_TOPIC, {
+                                "event_id": str(uuid.uuid4()),
+                                "type": "CorrelationDLQ",
+                                "tenant_id": "unknown",
+                                "timestamp": int(time.time() * 1000),
+                                "payload": {"reason": f"Processing error: {str(e)}", "original_message": str(message.value)}
+                            })
+                        except:
+                            pass # If DLQ fails, we are in trouble.
                         continue
 
             # Commit offsets

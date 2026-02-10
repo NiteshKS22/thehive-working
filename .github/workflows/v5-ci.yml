@@ -21,38 +21,17 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Test Ingestion Service
-        working-directory: v5-core/alert-ingestion-service
+      - name: Test Services (Unit)
         run: |
-          pip install -r requirements.txt
-          pip install pytest httpx
-          if [ -d "tests" ]; then
-            pytest tests/
-          else
-            echo "No tests found."
-          fi
+          pip install -r v5-core/alert-ingestion-service/requirements.txt
+          pip install -r v5-core/dedup-correlation-service/requirements.txt
+          pip install -r v5-core/correlation-service/requirements.txt
+          pip install pytest httpx pyyaml
 
-      - name: Test Dedup Service
-        working-directory: v5-core/dedup-correlation-service
-        run: |
-          pip install -r requirements.txt
-          pip install pytest
-          if [ -d "tests" ]; then
-            pytest tests/
-          else
-            echo "No tests found."
-          fi
-
-      - name: Test Correlation Service
-        working-directory: v5-core/correlation-service
-        run: |
-          pip install -r requirements.txt
-          pip install pytest
-          if [ -d "tests" ]; then
-            pytest tests/
-          else
-            echo "No tests found."
-          fi
+          # Run tests
+          pytest v5-core/alert-ingestion-service/tests/
+          pytest v5-core/dedup-correlation-service/tests/
+          pytest v5-core/correlation-service/tests/
 
       - name: Build Docker Images
         run: |
@@ -73,120 +52,76 @@ jobs:
           vuln-type: 'os,library'
           severity: 'CRITICAL'
 
-      - name: Start v5 Stack
+      - name: Start v5 Stack (Infrastructure)
         working-directory: v5-core/event-spine
-        run: docker-compose up -d
+        run: |
+           docker-compose up -d
+           sleep 5
+           docker network ls
 
-      - name: Wait for OpenSearch & Apply Template
+      - name: Wait for Infrastructure
         run: |
           echo "Waiting for OpenSearch..."
-          timeout 60s bash -c 'until curl -s http://localhost:9200/_cluster/health | grep -E "\"status\":\"(green|yellow)\""; do sleep 5; done'
+          timeout 60s bash -c 'until curl -s http://localhost:9200/_cluster/health | grep -E ""status":"(green|yellow)""; do sleep 5; done'
 
-          echo "Applying Index Template..."
-          curl -X PUT "http://localhost:9200/_index_template/alerts_template" \
-            -H "Content-Type: application/json" \
-            -d @v5-core/opensearch-indexer-service/OPENSEARCH_INDEX_TEMPLATE.json
+          echo "Applying Index Templates..."
+          curl -X PUT "http://localhost:9200/_index_template/alerts_template"             -H "Content-Type: application/json"             -d @v5-core/opensearch-indexer-service/OPENSEARCH_INDEX_TEMPLATE.json
 
           echo "Applying Groups Index Template..."
-          curl -X PUT "http://localhost:9200/_index_template/groups_template" \
-            -H "Content-Type: application/json" \
-            -d @v5-core/group-indexer-service/GROUPS_INDEX_TEMPLATE.json
+          curl -X PUT "http://localhost:9200/_index_template/groups_template"             -H "Content-Type: application/json"             -d @v5-core/group-indexer-service/GROUPS_INDEX_TEMPLATE.json
 
-      - name: Start Services
+      - name: Start App Services
         run: |
-          # Use host networking for simplicity in CI or properly link
-          # Assuming 'host' network allows localhost access to mapped ports
+          # Detect Network Name - directory is v5-core/event-spine -> event-spine_default
+          NETWORK_NAME="event-spine_default"
 
-          docker run -d --name ingestion-service --network host \
-            -e KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
-            thehive-ingestion:ci
+          # Dedup (Internal: redpanda:29092, redis:6379)
+          docker run -d --name dedup-service --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092             -e REDIS_HOST=redis             thehive-dedup:ci
 
-          docker run -d --name dedup-service --network host \
-            -e KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
-            -e REDIS_HOST=localhost \
-            thehive-dedup:ci
+          # Indexer (Internal: redpanda:29092, opensearch:9200)
+          docker run -d --name indexer-service --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092             -e OPENSEARCH_HOST=opensearch             thehive-indexer:ci
 
-          docker run -d --name indexer-service --network host \
-            -e KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
-            -e OPENSEARCH_HOST=localhost \
-            thehive-indexer:ci
+          # Correlation (Internal: redpanda:29092, postgres:5432)
+          docker run -d --name correlation-service --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092             -e POSTGRES_HOST=postgres             -e POSTGRES_PASSWORD=hive             thehive-correlation:ci
 
-          docker run -d --name correlation-service --network host \
-            -e KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
-            -e POSTGRES_HOST=localhost \
-            -e POSTGRES_PASSWORD=hive \
-            thehive-correlation:ci
+          # Group Indexer
+          docker run -d --name group-indexer-service --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092             -e OPENSEARCH_HOST=opensearch             thehive-group-indexer:ci
 
-          docker run -d --name group-indexer-service --network host \
-            -e KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
-            -e OPENSEARCH_HOST=localhost \
-            thehive-group-indexer:ci
+          # Query API (Port 8001)
+          docker run -d --name query-service --network $NETWORK_NAME             -p 8001:8001             -e OPENSEARCH_HOST=opensearch             -e POSTGRES_HOST=postgres             -e POSTGRES_PASSWORD=hive             thehive-query:ci
 
-          docker run -d --name query-service --network host \
-            -e OPENSEARCH_HOST=localhost \
-            -e POSTGRES_HOST=localhost \
-            -e POSTGRES_PASSWORD=hive \
-            thehive-query:ci
+          # Ingestion API (Port 8000)
+          docker run -d --name ingestion-service --network $NETWORK_NAME             -p 8000:8000             -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092             thehive-ingestion:ci
 
-
+          sleep 10 # Wait for startup
 
       - name: Smoke Test - Full Pipeline
         run: |
           # 1. Ingest Alert that triggers Correlation
-          # Rule R1: Same host + same rule_id
-          # We need to send payload with host and rule_id
+          echo "Ingesting Alerts..."
+          curl -X POST http://localhost:8000/ingest             -H "Content-Type: application/json"             -H "Idempotency-Key: test-corr-1"             -d '{"source": "ci", "type": "test", "sourceRef": "ref-1", "title": "Correlation Test 1", "description": "Group me", "tenant_id": "tenant-A", "host": "host-1", "rule_id": "rule-X"}'
 
-          echo "Ingesting Alert 1..."
-          curl -X POST http://localhost:8000/ingest \
-            -H "Content-Type: application/json" \
-            -H "Idempotency-Key: test-corr-1" \
-            -d '{"source": "ci", "type": "test", "sourceRef": "ref-1", "title": "Correlation Test 1", "description": "Group me", "tenant_id": "tenant-A", "host": "host-1", "rule_id": "rule-X"}'
+          curl -X POST http://localhost:8000/ingest             -H "Content-Type: application/json"             -H "Idempotency-Key: test-corr-2"             -d '{"source": "ci", "type": "test", "sourceRef": "ref-2", "title": "Correlation Test 2", "description": "Group me too", "tenant_id": "tenant-A", "host": "host-1", "rule_id": "rule-X"}'
 
-          echo "Ingesting Alert 2 (Same Group)..."
-          curl -X POST http://localhost:8000/ingest \
-            -H "Content-Type: application/json" \
-            -H "Idempotency-Key: test-corr-2" \
-            -d '{"source": "ci", "type": "test", "sourceRef": "ref-2", "title": "Correlation Test 2", "description": "Group me too", "tenant_id": "tenant-A", "host": "host-1", "rule_id": "rule-X"}'
-
-          echo "Ingesting Alert 3 (Different Tenant - Isolation)..."
-          curl -X POST http://localhost:8000/ingest \
-            -H "Content-Type: application/json" \
-            -H "Idempotency-Key: test-corr-3" \
-            -d '{"source": "ci", "type": "test", "sourceRef": "ref-3", "title": "Isolation Test", "description": "Separate Group", "tenant_id": "tenant-B", "host": "host-1", "rule_id": "rule-X"}'
+          curl -X POST http://localhost:8000/ingest             -H "Content-Type: application/json"             -H "Idempotency-Key: test-corr-3"             -d '{"source": "ci", "type": "test", "sourceRef": "ref-3", "title": "Isolation Test", "description": "Separate Group", "tenant_id": "tenant-B", "host": "host-1", "rule_id": "rule-X"}'
 
           # Wait for processing
           sleep 15
 
           # 3. Query Groups for Tenant A
           echo "Querying Groups for Tenant A..."
-          response=$(curl -s "http://localhost:8001/groups?tenant_id=tenant-A")
-          echo "Tenant A Groups: $response"
+          response=
+          echo "Tenant A Groups: "
 
-          # We expect 1 group with alert_count=2 (or approx, depending on race conditions, but at least 1)
-          if [[ "$response" == *""total":1"* || "$response" == *""total": 1"* ]]; then
-            echo "SUCCESS: Tenant A has 1 group."
-          else
-            echo "FAILURE: Tenant A group count incorrect."
-            exit 1
-          fi
+          # Verify JSON
+          python3 .github/scripts/verify_smoke.py "" 1
 
           # 4. Query Groups for Tenant B
           echo "Querying Groups for Tenant B..."
-          response_b=$(curl -s "http://localhost:8001/groups?tenant_id=tenant-B")
-          echo "Tenant B Groups: $response_b"
+          response_b=
+          echo "Tenant B Groups: "
 
-          if [[ "$response_b" == *""total":1"* || "$response_b" == *""total": 1"* ]]; then
-             echo "SUCCESS: Tenant B has 1 group."
-          else
-             echo "FAILURE: Tenant B group count incorrect."
-             exit 1
-          fi
-
-          # 5. Get Group Details & Alerts
-          # Extract group_id from Tenant A response
-          # This is tricky in bash without jq. Assuming simple grep.
-          # response looks like { "total": 1, "hits": [{ "group_id": "...", ... }] }
-          # We'll just verify query endpoint returns 200 OK for now or use Python script in next step if robust check needed.
+          python3 .github/scripts/verify_smoke.py "" 1
 
       - name: Stop Stack
         if: always()

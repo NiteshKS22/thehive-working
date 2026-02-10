@@ -70,9 +70,8 @@ def main():
                     doc = payload.copy()
                     doc['tenant_id'] = tenant_id
 
-                    # Ensure timestamp fields are properly formatted if needed
-                    # OpenSearch handles numbers as dates if mapping set to epoch_millis.
-                    # Payload has first_seen/last_seen as integers (ms). Correct.
+                    # Add type if needed (e.g., for filtering in mixed indices)
+                    # doc['type'] = event.get('type')
 
                     # Generate deterministic _id
                     doc_id = f"{tenant_id}:{group_id}"

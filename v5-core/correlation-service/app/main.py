@@ -77,6 +77,7 @@ def main():
             msg_pack = consumer.poll(timeout_ms=1000)
 
             for tp, messages in msg_pack.items():
+                batch_success = True
                 for message in messages:
                     try:
                         event = message.value
@@ -90,20 +91,25 @@ def main():
 
                         if not tenant_id or not original_event_id:
                             logger.error(f"Missing required fields: {event}. Sending to DLQ.")
-                            dlq_event = {
-                                "event_id": str(uuid.uuid4()),
-                                "type": "CorrelationDLQ",
-                                "tenant_id": tenant_id or "unknown",
-                                "trace_id": trace_id,
-                                "timestamp": int(time.time() * 1000),
-                                "schema_version": "1.0",
-                                "payload": {
-                                    "reason": "Missing tenant_id or original_event_id",
-                                    "original_message": event
+                            # FIX C1: Must succeed DLQ or fail batch
+                            try:
+                                dlq_event = {
+                                    "event_id": str(uuid.uuid4()),
+                                    "type": "CorrelationDLQ",
+                                    "tenant_id": tenant_id or "unknown",
+                                    "trace_id": trace_id,
+                                    "timestamp": int(time.time() * 1000),
+                                    "schema_version": "1.0",
+                                    "payload": {
+                                        "reason": "Missing tenant_id or original_event_id",
+                                        "original_message": event
+                                    }
                                 }
-                            }
-                            # Send DLQ without key (random partition is fine for DLQ)
-                            producer.send(DLQ_TOPIC, dlq_event)
+                                producer.send(DLQ_TOPIC, dlq_event)
+                            except Exception as dlq_e:
+                                logger.error(f"DLQ failed: {dlq_e}")
+                                batch_success = False
+                                break # Stop batch processing
                             continue
 
                         # Evaluate Rules
@@ -112,7 +118,6 @@ def main():
                         for match in matches:
                             group_id = match['group_id']
 
-                            # Prepare Data
                             group_data = {
                                 "tenant_id": tenant_id,
                                 "group_id": group_id,
@@ -135,9 +140,9 @@ def main():
                             }
 
                             # Process in DB
+                            # FIX C1: If DB fails, exception raises, caught below -> batch fails
                             is_new_group, is_new_link, new_count, new_severity = db.process_correlation(group_data, link_data)
 
-                            # Fix: Use key=group_id to ensure ordering
                             key_bytes = group_id.encode('utf-8')
 
                             if is_new_group:
@@ -203,7 +208,9 @@ def main():
                                 })
 
                     except Exception as e:
+                        # Catch processing error (DB, logic)
                         logger.error(f"Error processing message: {e}")
+                        # Try DLQ
                         try:
                             producer.send(DLQ_TOPIC, {
                                 "event_id": str(uuid.uuid4()),
@@ -213,12 +220,20 @@ def main():
                                 "payload": {"reason": f"Processing error: {str(e)}", "original_message": str(message.value)}
                             })
                         except:
-                            pass
-                        continue
+                            # If DLQ fails, we must fail batch
+                            logger.error("DLQ failed after processing error. Failing batch.")
+                            batch_success = False
+                            break
+                        continue # Continue to next message if DLQ OK
 
-            if msg_pack:
-                producer.flush()
-                consumer.commit()
+                # Commit offsets ONLY if batch success
+                if batch_success:
+                    producer.flush()
+                    consumer.commit()
+                else:
+                    # If batch failed, we don't commit. Next poll/restart will replay.
+                    # We might process some dupes, but operations are idempotent.
+                    logger.warning("Batch failed. Not committing offsets.")
 
         except Exception as e:
             logger.error(f"Error in consumer loop: {e}")

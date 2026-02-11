@@ -152,8 +152,6 @@ def get_group(group_id: str, tenant_id: str = Query(...)):
         if response["_source"]["tenant_id"] != tenant_id:
              raise HTTPException(status_code=404, detail="Group not found")
 
-        # Enrich with rule metadata?
-        # Ideally stored in OpenSearch, but if we want fresh rule info:
         group_data = response["_source"]
         rule_id = group_data.get("rule_id")
         if rule_id:
@@ -211,7 +209,10 @@ def get_group_alerts(group_id: str, tenant_id: str = Query(...)):
         }
         resp = os_client.search(body=query_body, index=INDEX_ALERTS)
         for hit in resp["hits"]["hits"]:
-            os_docs[hit["_id"]] = hit["_source"]
+            source = hit["_source"]
+            if source.get("tenant_id") == tenant_id:
+                os_docs[hit["_id"]] = source
+
     except Exception as e:
         print(f"Failed to fetch alert details: {e}")
 
@@ -219,11 +220,12 @@ def get_group_alerts(group_id: str, tenant_id: str = Query(...)):
     for link in links:
         aid = link["id"]
         detail = os_docs.get(aid, {})
-        detail["_link_info"] = {
-            "linked_at": link["linked_at"],
-            "reason": link["reason"]
-        }
-        results.append(detail)
+        if detail:
+            detail["_link_info"] = {
+                "linked_at": link["linked_at"],
+                "reason": link["reason"]
+            }
+            results.append(detail)
 
     return {"total": len(results), "hits": results}
 
@@ -232,7 +234,6 @@ def list_rules():
     conn = get_db_conn()
     try:
         with conn.cursor() as cur:
-            # Return all rules (enabled/disabled)
             cur.execute("SELECT rule_id, rule_name, enabled, confidence, window_minutes, correlation_key_template, required_fields FROM correlation_rules ORDER BY rule_id")
             rows = cur.fetchall()
             rules = []
@@ -255,7 +256,6 @@ def simulate_rules(
     alert_payload: Dict[str, Any] = Body(...),
     tenant_id: str = Query(..., description="Tenant ID to simulate context")
 ):
-    # Dry-run simulation
     conn = get_db_conn()
     rules = []
     try:

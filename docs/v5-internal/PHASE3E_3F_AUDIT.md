@@ -2,30 +2,35 @@
 
 ## C1: Offsets Commit Safety
 - **STATUS**: BUG
-- **EVIDENCE**: `v5-core/correlation-service/app/main.py`. `consumer.commit()` happens after loop, even if `process_correlation` failed and DLQ failed (if caught). `enable_auto_commit` is False, but logic commits batch even on partial failure.
-- **ACTION**: Move commit to happen *per message* or track offsets strictly. For performance, we can commit batch only if ALL succeeded. Current logic `try...except...continue` swallows errors. Will update loop to `break` on critical failure or ensure successful DLQ before counting as processed.
-- **TEST**: Code inspection.
+- **EVIDENCE**: `v5-core/correlation-service/app/main.py` original logic committed batch even if processing failed (swallowed exceptions) or if DLQ failed (not handled explicitly).
+- **REASONING**: Committing offsets when data was not persisted or DLQ'd results in "At-Most-Once" delivery (data loss) on failure.
+- **ACTION**: Updated loop to track `batch_success`. If processing error occurs AND DLQ publish fails, `batch_success` is set to `False` and `consumer.commit()` is skipped.
+- **TEST**: `v5-core/correlation-service/tests/test_offset_safety.py` validates that commit is skipped on DLQ failure.
 
 ## C2: Rules Tenant Scope
-- **STATUS**: NOT A BUG (System Design Choice)
-- **EVIDENCE**: `init.sql` defines `correlation_rules` without `tenant_id`.
-- **REASONING**: Rules are global system definitions (templates) applied to all tenants. Tenant isolation happens at Group/Link creation time (using `tenant_id` from alert).
-- **ACTION**: Added documentation note clarifying "Rules are Global".
+- **STATUS**: NOT A BUG
+- **EVIDENCE**: `v5-core/event-spine/init.sql`. `correlation_rules` table does not have `tenant_id`.
+- **REASONING**: Rules are global system templates (Phase 3F design). Tenant isolation is enforced during processing (Group creation is scoped by `tenant_id` from the alert).
+- **ACTION**: Added documentation note in `PHASE3E_3F_RUNBOOK.md` clarifying that rules are global. No code change needed.
+- **TEST**: Code inspection of `init.sql`.
 
 ## C3: Simulation Side Effects
 - **STATUS**: NOT A BUG
 - **EVIDENCE**: `v5-core/query-api-service/app/main.py` -> `simulate_rules`.
-- **REASONING**: Calculates in-memory, returns JSON. No `producer.send` or `db.execute(INSERT)`.
+- **REASONING**: Function only calculates matches in memory and returns JSON. It contains no `producer.send()` calls or DB `INSERT/UPDATE` statements.
 - **ACTION**: None.
+- **TEST**: Code inspection confirming absence of side effects.
 
 ## C4: Reload Atomicity
 - **STATUS**: NOT A BUG
-- **EVIDENCE**: `RuleEngine.reload_rules` swaps `self.rules` reference. Python list assignment is atomic. Old list stays valid for active readers.
+- **EVIDENCE**: `v5-core/correlation-service/app/rules.py` uses `self.rules = new_rules`.
+- **REASONING**: Python list assignment is atomic. Any running `evaluate` loop holds a reference to the old list and finishes safely. Next call picks up the new list.
 - **ACTION**: None.
+- **TEST**: Code inspection.
 
 ## C5: Group Timeline Tenant Isolation
-- **STATUS**: BUG (Minor/Strictness)
-- **EVIDENCE**: `v5-core/query-api-service/app/main.py` -> `get_group_alerts`. Fetches docs from OpenSearch by ID without validating `doc['tenant_id'] == requested_tenant_id`.
-- **REASONING**: While IDs are derived from Postgres links (which are tenant-safe), a compromised or buggy OpenSearch index could return data from another tenant if IDs collide or index is shared improperly.
-- **ACTION**: Add explicit check: `if doc.get('tenant_id') != tenant_id: continue/raise`.
-- **TEST**: Code inspection.
+- **STATUS**: BUG
+- **EVIDENCE**: `v5-core/query-api-service/app/main.py` -> `get_group_alerts` fetched docs from OpenSearch by ID and added them to response without checking `tenant_id`.
+- **REASONING**: Defense-in-depth requires validating `tenant_id` on retrieved objects to prevent cross-tenant leakage if indices are corrupted or shared.
+- **ACTION**: Added explicit check `if source.get("tenant_id") == tenant_id` before adding to results.
+- **TEST**: `v5-core/query-api-service/tests/test_isolation.py` proves mismatched tenants are filtered out.

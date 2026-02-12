@@ -1,6 +1,7 @@
 import os
 import jwt
 import logging
+import sys
 from fastapi import Request, HTTPException, status, Depends
 from typing import Optional, List, Union
 from pydantic import BaseModel
@@ -17,6 +18,15 @@ def get_config():
         "JWKS_URL": os.getenv("JWKS_URL", "")
     }
 
+# CHECK 3: RS256 Guardrail (Startup Check)
+# Must fail at import/startup if misconfigured.
+_config = get_config()
+if _config["JWT_ALGORITHM"] != "HS256" and not _config["JWKS_URL"] and not _config["JWT_SECRET"]:
+    msg = "CRITICAL: RS256 requires JWKS/PublicKey (JWKS_URL or JWT_SECRET PEM)"
+    logger.critical(msg)
+    # Raising SystemExit ensures immediate failure
+    sys.exit(msg)
+
 class AuthContext(BaseModel):
     user_id: str
     tenant_id: str
@@ -26,9 +36,6 @@ async def get_auth_context(request: Request) -> AuthContext:
     config = get_config()
 
     if config["DEV_MODE"]:
-        # FIX A: Safe DEV_MODE - Check for explicit allow-list or localhost?
-        # For now, we assume if DEV_MODE=true env var is set, the environment is safe (internal/local).
-        # We will allow headers but log strictly.
         dev_tenant = request.headers.get("X-Dev-Tenant", "dev-tenant")
         dev_user = request.headers.get("X-Dev-User", "dev-user")
         dev_roles_str = request.headers.get("X-Dev-Roles", "SYSTEM_ADMIN")
@@ -44,13 +51,7 @@ async def get_auth_context(request: Request) -> AuthContext:
     token = auth_header.split(" ")[1]
 
     try:
-        # FIX C: Guardrail for RS256 without key
-        if config["JWT_ALGORITHM"] != "HS256" and not config["JWKS_URL"] and not config["JWT_SECRET"]:
-             logger.error("Misconfiguration: RS256 requires JWKS/PublicKey")
-             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Auth configuration error")
-
-        # In a real impl, we'd fetch JWKS here for RS256.
-        # For Phase E1, we stick to checking signature with provided secret/key.
+        # RS256 Guardrail verified at startup
 
         payload = jwt.decode(
             token,
@@ -60,7 +61,6 @@ async def get_auth_context(request: Request) -> AuthContext:
             issuer=config["OIDC_ISSUER"]
         )
 
-        # FIX B: Claims Enforcement
         tenant_id = payload.get("tenant_id")
         user_id = payload.get("sub")
         roles_raw = payload.get("roles", [])
@@ -70,7 +70,6 @@ async def get_auth_context(request: Request) -> AuthContext:
         if not user_id:
              raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token missing sub (user_id)")
 
-        # FIX B: Roles Normalization (String -> List)
         if isinstance(roles_raw, str):
             roles = [roles_raw]
         elif isinstance(roles_raw, list):
@@ -87,9 +86,7 @@ async def get_auth_context(request: Request) -> AuthContext:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 def require_role(required_roles: List[str]):
-    # FIX D: Wiring dependency correctly
     def dependency(ctx: AuthContext = Depends(get_auth_context)):
-        # Check logic
         if not any(role in ctx.roles for role in required_roles):
              raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Insufficient role. Required: {required_roles}")
         return ctx

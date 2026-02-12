@@ -2,3 +2,4 @@ fastapi
 uvicorn
 opensearch-py
 psycopg2-binary
+pyjwt

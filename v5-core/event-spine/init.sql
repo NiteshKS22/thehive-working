@@ -54,3 +54,60 @@ VALUES
 ('R2_USER_AUTH', 'Auth anomalies by user', TRUE, 'HIGH', 10, '{tenant_id}|{user}|{auth_type}', ARRAY['tenant_id', 'user', 'auth_type'], 1700000000000, 1700000000000),
 ('R3_OBSERVABLE_HASH', 'Same observable hash', TRUE, 'MEDIUM', 30, '{tenant_id}|{observable_hash}|{observable_type}', ARRAY['tenant_id', 'observable_hash', 'observable_type'], 1700000000000, 1700000000000)
 ON CONFLICT (rule_id) DO NOTHING;
+
+-- Phase E1: Identity & RBAC
+
+CREATE TABLE IF NOT EXISTS roles (
+    role_id VARCHAR(64) PRIMARY KEY,
+    description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS permissions (
+    permission_id VARCHAR(64) PRIMARY KEY,
+    description TEXT
+);
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role_id VARCHAR(64) REFERENCES roles(role_id) ON DELETE CASCADE,
+    permission_id VARCHAR(64) REFERENCES permissions(permission_id) ON DELETE CASCADE,
+    PRIMARY KEY (role_id, permission_id)
+);
+
+-- Seed Roles
+INSERT INTO roles (role_id, description) VALUES
+('SOC_ANALYST', 'Standard analyst: read alerts, groups'),
+('SOC_LEAD', 'Lead analyst: manage rules, user assignment'),
+('RULE_ADMIN', 'Manage correlation rules'),
+('TENANT_ADMIN', 'Manage tenant settings'),
+('SYSTEM_ADMIN', 'Full system access')
+ON CONFLICT (role_id) DO NOTHING;
+
+-- Seed Permissions
+INSERT INTO permissions (permission_id, description) VALUES
+('alerts.read', 'Read alerts'),
+('alerts.write', 'Create/Update alerts'),
+('groups.read', 'Read groups'),
+('groups.write', 'Manage groups'),
+('rules.read', 'Read rules'),
+('rules.write', 'Manage rules'),
+('correlation.disable', 'Kill switch')
+ON CONFLICT (permission_id) DO NOTHING;
+
+-- Seed Role-Permissions
+INSERT INTO role_permissions (role_id, permission_id) VALUES
+('SOC_ANALYST', 'alerts.read'),
+('SOC_ANALYST', 'groups.read'),
+('SOC_LEAD', 'alerts.read'),
+('SOC_LEAD', 'groups.read'),
+('SOC_LEAD', 'rules.read'),
+('RULE_ADMIN', 'rules.read'),
+('RULE_ADMIN', 'rules.write'),
+('RULE_ADMIN', 'correlation.disable'),
+('SYSTEM_ADMIN', 'alerts.read'),
+('SYSTEM_ADMIN', 'alerts.write'),
+('SYSTEM_ADMIN', 'groups.read'),
+('SYSTEM_ADMIN', 'groups.write'),
+('SYSTEM_ADMIN', 'rules.read'),
+('SYSTEM_ADMIN', 'rules.write'),
+('SYSTEM_ADMIN', 'correlation.disable')
+ON CONFLICT DO NOTHING;

@@ -47,3 +47,9 @@
 `POST /rules/simulate?tenant_id=...`
 - **Payload**: JSON alert object.
 - **Response**: List of hypothetical groups that would be created.
+
+## Authentication (Phase E1)
+
+All v5 APIs require `Authorization: Bearer <JWT>`.
+- **Claims Required**: `sub`, `tenant_id`, `roles`, `exp`, `iss`.
+- **Tenant Scope**: APIs default to the `tenant_id` in the token. Query parameters for tenant overrides are deprecated/removed.

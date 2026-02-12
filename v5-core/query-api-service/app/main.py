@@ -1,11 +1,16 @@
-from fastapi import FastAPI, HTTPException, Query, Body
+from fastapi import FastAPI, HTTPException, Query, Body, Depends, status
 from opensearchpy import OpenSearch
 import os
 import psycopg2
 import time
 import hashlib
 import itertools
+import sys
 from typing import List, Optional, Dict, Any
+
+# Mount Common Auth
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../common')))
+from auth.middleware import get_auth_context, AuthContext, require_role
 
 app = FastAPI(title="TheHive v5 Query Service")
 
@@ -54,15 +59,15 @@ def health_check():
 @app.get("/alerts")
 def search_alerts(
     q: str = Query(None, description="Simple query string"),
-    tenant_id: str = Query(..., description="Tenant ID (mandatory)"),
     size: int = 20,
-    from_: int = 0
+    from_: int = 0,
+    auth: AuthContext = Depends(get_auth_context)
 ):
     query_body = {
         "query": {
             "bool": {
                 "filter": [
-                    {"term": {"tenant_id": tenant_id}}
+                    {"term": {"tenant_id": auth.tenant_id}}
                 ]
             }
         },
@@ -86,12 +91,12 @@ def search_alerts(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/alerts/{alert_id}")
-def get_alert(alert_id: str, tenant_id: str = Query(...)):
+def get_alert(alert_id: str, auth: AuthContext = Depends(get_auth_context)):
     query_body = {
         "query": {
             "bool": {
                 "filter": [
-                    {"term": {"tenant_id": tenant_id}},
+                    {"term": {"tenant_id": auth.tenant_id}},
                     {"ids": {"values": [alert_id]}}
                 ]
             }
@@ -107,16 +112,16 @@ def get_alert(alert_id: str, tenant_id: str = Query(...)):
 @app.get("/groups")
 def search_groups(
     q: str = Query(None, description="Query string for groups"),
-    tenant_id: str = Query(..., description="Tenant ID (mandatory)"),
     status: Optional[str] = Query(None, regex="^(OPEN|CLOSED|MERGED)$"),
     size: int = 20,
-    from_: int = 0
+    from_: int = 0,
+    auth: AuthContext = Depends(get_auth_context)
 ):
     query_body = {
         "query": {
             "bool": {
                 "filter": [
-                    {"term": {"tenant_id": tenant_id}}
+                    {"term": {"tenant_id": auth.tenant_id}}
                 ]
             }
         },
@@ -145,11 +150,11 @@ def search_groups(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/groups/{group_id}")
-def get_group(group_id: str, tenant_id: str = Query(...)):
-    doc_id = f"{tenant_id}:{group_id}"
+def get_group(group_id: str, auth: AuthContext = Depends(get_auth_context)):
+    doc_id = f"{auth.tenant_id}:{group_id}"
     try:
         response = os_client.get(index=INDEX_GROUPS, id=doc_id)
-        if response["_source"]["tenant_id"] != tenant_id:
+        if response["_source"]["tenant_id"] != auth.tenant_id:
              raise HTTPException(status_code=404, detail="Group not found")
 
         group_data = response["_source"]
@@ -178,14 +183,14 @@ def get_group(group_id: str, tenant_id: str = Query(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/groups/{group_id}/alerts")
-def get_group_alerts(group_id: str, tenant_id: str = Query(...)):
+def get_group_alerts(group_id: str, auth: AuthContext = Depends(get_auth_context)):
     conn = get_db_conn()
     links = []
     try:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT original_event_id, linked_at, link_reason FROM correlation_group_alert_links WHERE tenant_id = %s AND group_id = %s ORDER BY linked_at ASC",
-                (tenant_id, group_id)
+                (auth.tenant_id, group_id)
             )
             rows = cur.fetchall()
             for r in rows:
@@ -210,7 +215,7 @@ def get_group_alerts(group_id: str, tenant_id: str = Query(...)):
         resp = os_client.search(body=query_body, index=INDEX_ALERTS)
         for hit in resp["hits"]["hits"]:
             source = hit["_source"]
-            if source.get("tenant_id") == tenant_id:
+            if source.get("tenant_id") == auth.tenant_id:
                 os_docs[hit["_id"]] = source
 
     except Exception as e:
@@ -230,7 +235,8 @@ def get_group_alerts(group_id: str, tenant_id: str = Query(...)):
     return {"total": len(results), "hits": results}
 
 @app.get("/rules")
-def list_rules():
+def list_rules(auth: AuthContext = Depends(get_auth_context)):
+    # Assuming rules are global read, but authenticated
     conn = get_db_conn()
     try:
         with conn.cursor() as cur:
@@ -254,7 +260,7 @@ def list_rules():
 @app.post("/rules/simulate")
 def simulate_rules(
     alert_payload: Dict[str, Any] = Body(...),
-    tenant_id: str = Query(..., description="Tenant ID to simulate context")
+    auth: AuthContext = Depends(get_auth_context) # Require Auth, implicit Tenant
 ):
     conn = get_db_conn()
     rules = []
@@ -277,7 +283,7 @@ def simulate_rules(
     timestamp = int(time.time() * 1000)
     matches = []
 
-    context = {"tenant_id": [tenant_id]}
+    context = {"tenant_id": [auth.tenant_id]} # Force tenant from auth
     for k, v in alert_payload.items():
         if isinstance(v, list):
             context[k] = v
@@ -306,7 +312,7 @@ def simulate_rules(
 
                 window_ms = rule['window_minutes'] * 60 * 1000
                 window_idx = int(timestamp / window_ms) if window_ms > 0 else 0
-                raw_id = f"{tenant_id}:{rule['rule_id']}:{key}:{window_idx}"
+                raw_id = f"{auth.tenant_id}:{rule['rule_id']}:{key}:{window_idx}"
                 group_id = hashlib.sha256(raw_id.encode('utf-8')).hexdigest()
 
                 matches.append({

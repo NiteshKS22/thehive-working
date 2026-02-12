@@ -1,6 +1,7 @@
 import os
 import jwt
 import logging
+import sys
 from fastapi import Request, HTTPException, status, Depends
 from typing import Optional, List, Union
 from pydantic import BaseModel
@@ -11,26 +12,19 @@ logger = logging.getLogger("auth-middleware")
 def get_config():
     return {
         "DEV_MODE": os.getenv("DEV_MODE", "false").lower() == "true",
+        "ALLOW_DEV_OVERRIDES": os.getenv("ALLOW_DEV_OVERRIDES", "false").lower() == "true",
         "JWT_SECRET": os.getenv("JWT_SECRET", "dev-secret-do-not-use-in-prod"),
         "JWT_ALGORITHM": os.getenv("JWT_ALGORITHM", "HS256"),
         "OIDC_ISSUER": os.getenv("OIDC_ISSUER", "https://auth.example.com"),
         "JWKS_URL": os.getenv("JWKS_URL", "")
     }
 
-def validate_auth_config():
-    """
-    Validates authentication configuration at startup.
-    Raises RuntimeError if insecure configuration is detected.
-    """
-    config = get_config()
-    algo = config["JWT_ALGORITHM"]
-
-    if algo != "HS256" and not config["JWKS_URL"] and not config["JWT_SECRET"]:
-        msg = f"CRITICAL: {algo} requires JWKS/PublicKey (JWKS_URL or JWT_SECRET PEM). Service startup aborted."
-        logger.critical(msg)
-        raise RuntimeError(msg)
-
-    logger.info(f"Auth Config Validated: Algorithm={algo}, DevMode={config['DEV_MODE']}")
+# CHECK 3: RS256 Guardrail (Startup Check)
+_config = get_config()
+if _config["JWT_ALGORITHM"] != "HS256" and not _config["JWKS_URL"] and not _config["JWT_SECRET"]:
+    msg = "CRITICAL: RS256 requires JWKS/PublicKey (JWKS_URL or JWT_SECRET PEM)"
+    logger.critical(msg)
+    sys.exit(msg)
 
 class AuthContext(BaseModel):
     user_id: str
@@ -41,13 +35,25 @@ async def get_auth_context(request: Request) -> AuthContext:
     config = get_config()
 
     if config["DEV_MODE"]:
-        dev_tenant = request.headers.get("X-Dev-Tenant", "dev-tenant")
-        dev_user = request.headers.get("X-Dev-User", "dev-user")
-        dev_roles_str = request.headers.get("X-Dev-Roles", "SYSTEM_ADMIN")
-        dev_roles = dev_roles_str.split(",") if "," in dev_roles_str else [dev_roles_str]
+        # Safe Defaults
+        user_id = "dev-user"
+        tenant_id = "dev-tenant"
+        roles = ["SYSTEM_ADMIN"]
 
-        logger.warning(f"DEV_MODE: Bypass Auth for user={dev_user} tenant={dev_tenant}")
-        return AuthContext(user_id=dev_user, tenant_id=dev_tenant, roles=dev_roles)
+        # Check overrides if allowed
+        if config["ALLOW_DEV_OVERRIDES"]:
+            if "X-Dev-Tenant" in request.headers:
+                tenant_id = request.headers["X-Dev-Tenant"]
+                logger.info(f"DEV_MODE: Tenant override -> {tenant_id}")
+            if "X-Dev-User" in request.headers:
+                user_id = request.headers["X-Dev-User"]
+            if "X-Dev-Roles" in request.headers:
+                roles_str = request.headers["X-Dev-Roles"]
+                roles = roles_str.split(",") if "," in roles_str else [roles_str]
+        elif "X-Dev-Tenant" in request.headers:
+            logger.warning("DEV_MODE: Header overrides present but ALLOW_DEV_OVERRIDES=False. Ignoring.")
+
+        return AuthContext(user_id=user_id, tenant_id=tenant_id, roles=roles)
 
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -56,11 +62,9 @@ async def get_auth_context(request: Request) -> AuthContext:
     token = auth_header.split(" ")[1]
 
     try:
-        # Configuration validated at startup, safe to use here
-
         payload = jwt.decode(
             token,
-            config["JWT_SECRET"], # Or public key
+            config["JWT_SECRET"],
             algorithms=[config["JWT_ALGORITHM"]],
             audience="v5-core",
             issuer=config["OIDC_ISSUER"]

@@ -10,16 +10,19 @@ from typing import Dict, Any, Optional
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 
-# Import Auth Middleware (Assuming common lib is available/mounted)
-# For simplicity in this mono-repo structure context, we'll append path
+# Import Auth Middleware
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../common')))
-from auth.middleware import get_auth_context, AuthContext, DEV_MODE
+from auth.middleware import get_auth_context, AuthContext, validate_auth_config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 logger = logging.getLogger("ingest-service")
 
 app = FastAPI(title="TheHive v5 Ingestion Service")
+
+@app.on_event("startup")
+def startup_event():
+    validate_auth_config()
 
 # Configuration
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "redpanda:29092")
@@ -64,10 +67,7 @@ async def ingest_alert(
     if not trace_id:
         trace_id = str(uuid.uuid4())
 
-    # Validation
-
     # Construct Event
-    # Inject tenant_id from AuthContext
     event = {
         "event_id": str(uuid.uuid4()),
         "trace_id": trace_id,
@@ -77,10 +77,8 @@ async def ingest_alert(
         "schema_version": "1.0",
         "payload": alert.model_dump()
     }
-    # Add tenant_id to payload as well for downstream convenience if needed (though top-level is authoritative)
     event['payload']['tenant_id'] = auth.tenant_id
 
-    # Publish
     if producer:
         try:
             producer.send(TOPIC_NAME, value=event)

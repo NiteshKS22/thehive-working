@@ -330,3 +330,6 @@ def simulate_rules(
                 continue
 
     return {"matches": matches}
+"""
+with open("v5-core/query-api-service/app/main.py", "w") as f:
+    f.write(content)

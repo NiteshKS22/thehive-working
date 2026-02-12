@@ -1,7 +1,6 @@
 import os
 import jwt
 import logging
-import sys
 from fastapi import Request, HTTPException, status, Depends
 from typing import Optional, List, Union
 from pydantic import BaseModel
@@ -18,14 +17,20 @@ def get_config():
         "JWKS_URL": os.getenv("JWKS_URL", "")
     }
 
-# CHECK 3: RS256 Guardrail (Startup Check)
-# Must fail at import/startup if misconfigured.
-_config = get_config()
-if _config["JWT_ALGORITHM"] != "HS256" and not _config["JWKS_URL"] and not _config["JWT_SECRET"]:
-    msg = "CRITICAL: RS256 requires JWKS/PublicKey (JWKS_URL or JWT_SECRET PEM)"
-    logger.critical(msg)
-    # Raising SystemExit ensures immediate failure
-    sys.exit(msg)
+def validate_auth_config():
+    """
+    Validates authentication configuration at startup.
+    Raises RuntimeError if insecure configuration is detected.
+    """
+    config = get_config()
+    algo = config["JWT_ALGORITHM"]
+
+    if algo != "HS256" and not config["JWKS_URL"] and not config["JWT_SECRET"]:
+        msg = f"CRITICAL: {algo} requires JWKS/PublicKey (JWKS_URL or JWT_SECRET PEM). Service startup aborted."
+        logger.critical(msg)
+        raise RuntimeError(msg)
+
+    logger.info(f"Auth Config Validated: Algorithm={algo}, DevMode={config['DEV_MODE']}")
 
 class AuthContext(BaseModel):
     user_id: str
@@ -51,7 +56,7 @@ async def get_auth_context(request: Request) -> AuthContext:
     token = auth_header.split(" ")[1]
 
     try:
-        # RS256 Guardrail verified at startup
+        # Configuration validated at startup, safe to use here
 
         payload = jwt.decode(
             token,

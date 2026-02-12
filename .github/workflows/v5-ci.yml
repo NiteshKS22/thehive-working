@@ -27,13 +27,15 @@ jobs:
           pip install -r v5-core/dedup-correlation-service/requirements.txt
           pip install -r v5-core/correlation-service/requirements.txt
           pip install -r v5-core/query-api-service/requirements.txt
-          pip install pytest httpx pyyaml pyjwt cryptography
+          pip install pytest httpx pyyaml pyjwt cryptography fastapi
 
       - name: Test Services (Unit)
         run: |
           pytest v5-core/alert-ingestion-service/tests/
           pytest v5-core/dedup-correlation-service/tests/
           pytest v5-core/correlation-service/tests/
+          # Now running middleware tests too
+          pytest v5-core/common/auth/tests/
 
       - name: Build Docker Images
         run: |

@@ -36,3 +36,20 @@
 `GET /groups/{group_id}/alerts?tenant_id=...`
 - **Response**: List of alerts linked to this group, ordered by time.
 - **Fields**: Alert details + `link_reason`, `linked_at`.
+
+## Rule Governance (Phase 3F)
+
+### List Rules
+`GET /rules`
+- **Response**: List of all configured correlation rules.
+
+### Simulate Rule
+`POST /rules/simulate?tenant_id=...`
+- **Payload**: JSON alert object.
+- **Response**: List of hypothetical groups that would be created.
+
+## Authentication (Phase E1)
+
+All v5 APIs require `Authorization: Bearer <JWT>`.
+- **Claims Required**: `sub`, `tenant_id`, `roles`, `exp`, `iss`.
+- **Tenant Scope**: APIs default to the `tenant_id` in the token. Query parameters for tenant overrides are deprecated/removed.

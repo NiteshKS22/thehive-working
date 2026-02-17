@@ -25,15 +25,11 @@ class Rule:
         # Add payload fields
         for k, v in payload.items():
             if isinstance(v, list):
-                # If list of primitives, use as is. If list of dicts (artifacts), extract?
-                # Simplified: assume primitives or we skip complex objects for now.
-                # Special handling for 'artifacts' if needed, but let's stick to payload fields.
                 context[k] = v
             else:
                 context[k] = [v]
 
         # 2. Check Required Fields & Prepare Iterables
-        # We need to generate all combinations of values for the required fields
         iterables = {}
         for field in self.required_fields:
             if field not in context or not context[field]:
@@ -41,20 +37,13 @@ class Rule:
             iterables[field] = context[field]
 
         # 3. Cartesian Product of values
-        # Get keys and list of value lists
         keys = list(iterables.keys())
         values_product = itertools.product(*(iterables[k] for k in keys))
 
         for combination in values_product:
-            # Build specific context for this combination
             local_ctx = dict(zip(keys, combination))
 
-            # Form Correlation Key
             try:
-                # We use local_ctx to format. We might need other fields from context (taken as first element if list)
-                # But typically correlation key depends only on required fields.
-                # If template uses non-required field, it might fail or pick arbitrary.
-                # Constraint: Template vars MUST be in required_fields.
                 key = self.template.format(**local_ctx)
             except KeyError:
                 continue
@@ -83,21 +72,41 @@ class Rule:
         return matches
 
 class RuleEngine:
-    def __init__(self, rules_file: str):
+    def __init__(self, db_instance=None):
         self.rules = []
-        self._load_rules(rules_file)
+        self.db = db_instance
+        if self.db:
+            self.reload_rules()
+        else:
+            # Fallback to file if DB not provided (testing/legacy)
+            self._load_file(os.getenv("RULES_FILE", "rules.yaml"))
 
-    def _load_rules(self, path: str):
+    def _load_file(self, path: str):
         if not os.path.exists(path):
             logger.warning(f"Rules file not found: {path}")
             return
-
         with open(path, 'r') as f:
             data = yaml.safe_load(f)
             if data and 'rules' in data:
                 for r in data['rules']:
                     self.rules.append(Rule(r))
-        logger.info(f"Loaded {len(self.rules)} rules")
+        logger.info(f"Loaded {len(self.rules)} rules from file")
+
+    def reload_rules(self):
+        if not self.db:
+            return
+
+        db_rules = self.db.fetch_rules()
+        if not db_rules:
+            logger.warning("No rules fetched from DB (or error). Keeping existing rules.")
+            return
+
+        new_rules = []
+        for r in db_rules:
+            new_rules.append(Rule(r))
+
+        self.rules = new_rules
+        logger.info(f"Reloaded {len(self.rules)} rules from DB")
 
     def evaluate(self, tenant_id: str, payload: Dict, timestamp: int) -> List[Dict]:
         all_matches = []

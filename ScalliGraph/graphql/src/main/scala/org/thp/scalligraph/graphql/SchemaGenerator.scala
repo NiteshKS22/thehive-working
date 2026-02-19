@@ -197,8 +197,10 @@ object SchemaGenerator {
   )(implicit executor: QueryExecutor, objectCatalog: TypeCatalog[CacheFunction[Option[OutputType[_]]]]): CacheFunction[Option[OutputType[_]]] = {
     logger.debug(s"getObject($tpe)")
     objectCatalog.getOrElseUpdate(tpe) {
-      if (tpe <:< ru.typeOf[Seq[_]]) // TODO add Set type ?
+      if (tpe <:< ru.typeOf[Seq[_]])
         getObject(RichType.getTypeArgs(tpe, ru.typeOf[Seq[_]]).head).andThen(_.map(ListType(_)))
+      else if (tpe <:< ru.typeOf[Set[_]])
+        getObject(RichType.getTypeArgs(tpe, ru.typeOf[Set[_]]).head).andThen(_.map(ListType(_)))
       else if (tpe <:< ru.typeOf[Option[_]])
         getObject(RichType.getTypeArgs(tpe, ru.typeOf[Option[_]]).head).andThen(_.map(OptionType(_)))
       else {
@@ -352,11 +354,12 @@ object SchemaGenerator {
     val t          = rm.classSymbol(property.mapping.domainTypeClass).toType // FIXME domainType or graphType ?
     val optionType = ru.typeOf[Option[_]].typeConstructor
     val seqType    = ru.typeOf[Seq[_]].typeConstructor
+    val setType    = ru.typeOf[Set[_]].typeConstructor
     val propertyType = property.mapping.cardinality match {
       case MappingCardinality.single => t
       case MappingCardinality.option => ru.appliedType(optionType, t)
       case MappingCardinality.list   => ru.appliedType(seqType, t)
-      case MappingCardinality.set    => ru.appliedType(seqType, t)
+      case MappingCardinality.set    => ru.appliedType(setType, t)
     }
     val traversalType   = ru.appliedType(ru.typeOf[Traversal[Any]].typeConstructor, propertyType)
     val objectType = getObject(traversalType).apply().get

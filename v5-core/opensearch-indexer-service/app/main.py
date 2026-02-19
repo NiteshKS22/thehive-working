@@ -55,6 +55,11 @@ def main():
     while running:
         try:
             msg_pack = consumer.poll(timeout_ms=1000)
+            if not msg_pack:
+                continue
+
+            # Optimization: Calculate index name once per batch
+            current_index = f"{INDEX_PREFIX}-{time.strftime('%Y.%m')}"
             actions = []
 
             for tp, messages in msg_pack.items():
@@ -79,7 +84,7 @@ def main():
 
                     # Bulk Action
                     action = {
-                        "_index": f"{INDEX_PREFIX}-{time.strftime('%Y.%m')}", # Monthly indices
+                        "_index": current_index,
                         "_id": payload.get('original_event_id'), # Use original_event_id to avoid overwriting distinct alerts with same fingerprint
                         "_source": doc
                     }

@@ -33,12 +33,19 @@ def compute_state_hash(state):
 def check_drift():
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("drift-check")
-    logger.info("Starting Nightly Drift Check (Hash-Based)")
+
+    opensearch_host = os.getenv("OPENSEARCH_HOST", "opensearch")
+    opensearch_port = int(os.getenv("OPENSEARCH_PORT", 9200))
+    use_ssl = os.getenv("OPENSEARCH_USE_SSL", "false").lower() == "true"
+    verify_certs = os.getenv("OPENSEARCH_VERIFY_CERTS", "true").lower() == "true"
+
+    logger.info(f"Starting Nightly Drift Check (Hash-Based). SSL={use_ssl}")
 
     # Connect to v5
     os_client = OpenSearch(
-        hosts=[{'host': os.getenv("OPENSEARCH_HOST", "opensearch"), 'port': 9200}],
-        use_ssl=False
+        hosts=[{'host': opensearch_host, 'port': opensearch_port}],
+        use_ssl=use_ssl,
+        verify_certs=verify_certs if use_ssl else False
     )
 
     try:

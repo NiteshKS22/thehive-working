@@ -101,3 +101,12 @@ flowchart TD
 | Metrics Data Leakage | Internal Binding (Workers) + No sensitive labels | Verified (E4.3) |
 | Secret Exposure | Redacted Logs + Secure Loader | Verified (E5) |
 | API DoS | Rate Limiting (Tenant Isolated) | Verified (E5) |
+
+### Threat-035: Insecure Bridge Communication
+
+**Risk:** Man-in-the-Middle (MitM) attacks on bridge traffic.
+**Status:** MITIGATED (Optional).
+**Mitigation:**
+1.  `v4-sync-service` supports SSL/TLS via `KAFKA_SECURITY_PROTOCOL=SSL` and CA/Cert/Key env vars.
+2.  If SSL is not configured, the service logs a warning on startup.
+3.  Production deployment MUST enable SSL.

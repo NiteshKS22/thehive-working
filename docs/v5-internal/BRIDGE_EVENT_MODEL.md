@@ -72,3 +72,23 @@ Emitted when an Alert is created or updated in v4.
 ## Security
 - **Tenant Isolation:** `tenant_id` is injected by the v4-Outbox-Publisher, which is a trusted component reading directly from the v4 DB context.
 - **Validation:** v5 consumers MUST validate that `tenant_id` matches the target resource if it already exists.
+
+## Drift Detection Strategy (Phase B1_4)
+
+Drift detection is performed in two layers:
+
+1.  **Inline (Real-time):** The `v4-sync-service` compares incoming event timestamps () against the current v5 state. If v5 is newer than the incoming v4 event, it logs a `DriftDetected` warning to the `bridge.drift.log.v1` topic. This prevents overwriting newer v5 data (though in Phase B1 v4 is authoritative).
+
+2.  **Nightly Job (Batch):** A script `nightly_drift_check.py` performs a hash-based comparison.
+    -   **Canonical Fields:** `case_id`, `title`, `status`, `severity`, `updated_at`.
+    -   **Logic:** Fetches batches of v5 cases, retrieves authoritative state from v4 (mocked for initial implementation), computes SHA-256 hashes of the canonical fields, and alerts on mismatch.
+
+## Drift Detection Strategy (Phase B1_4)
+
+Drift detection is performed in two layers:
+
+1.  **Inline (Real-time):** The `v4-sync-service` compares incoming event timestamps (`updated_at`) against the current v5 state. If v5 is newer than the incoming v4 event, it logs a `DriftDetected` warning to the `bridge.drift.log.v1` topic. This prevents overwriting newer v5 data (though in Phase B1 v4 is authoritative).
+
+2.  **Nightly Job (Batch):** A script `nightly_drift_check.py` performs a hash-based comparison.
+    -   **Canonical Fields:** `case_id`, `title`, `status`, `severity`, `updated_at`.
+    -   **Logic:** Fetches batches of v5 cases, retrieves authoritative state from v4 (mocked for initial implementation), computes SHA-256 hashes of the canonical fields, and alerts on mismatch.

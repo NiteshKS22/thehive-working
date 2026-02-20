@@ -27,6 +27,17 @@ OPENSEARCH_PORT = int(os.getenv("OPENSEARCH_PORT", 9200))
 OPENSEARCH_USE_SSL = os.getenv("OPENSEARCH_USE_SSL", "false").lower() == "true"
 KAFKA_SECURITY_PROTOCOL = os.getenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
 
+# SSL Settings
+KAFKA_SSL_CAFILE = os.getenv("KAFKA_SSL_CAFILE")
+KAFKA_SSL_CERTFILE = os.getenv("KAFKA_SSL_CERTFILE")
+KAFKA_SSL_KEYFILE = os.getenv("KAFKA_SSL_KEYFILE")
+
+if KAFKA_SECURITY_PROTOCOL == "SSL":
+    if not (KAFKA_SSL_CAFILE and KAFKA_SSL_CERTFILE and KAFKA_SSL_KEYFILE):
+        logger.warning("KAFKA_SECURITY_PROTOCOL is SSL but certificates are missing! This may fail.")
+else:
+    logger.warning("Kafka running in PLAINTEXT mode. Not for production use with sensitive data.")
+
 SYNC_CASE_TOPIC = "bridge.v4.case.sync.v1"
 SYNC_ALERT_TOPIC = "bridge.v4.alert.sync.v1"
 DRIFT_LOG_TOPIC = "bridge.drift.log.v1"
@@ -43,22 +54,39 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 def connect_kafka_consumer():
-    return KafkaConsumer(
-        SYNC_CASE_TOPIC,
-        SYNC_ALERT_TOPIC,
-        bootstrap_servers=KAFKA_BOOTSTRAP,
-        group_id="v4-sync-group",
-        auto_offset_reset='earliest',
-        security_protocol=KAFKA_SECURITY_PROTOCOL,
-        value_deserializer=lambda m: json.loads(m.decode('utf-8'))
-    )
+    kwargs = {
+        "bootstrap_servers": KAFKA_BOOTSTRAP,
+        "group_id": "v4-sync-group",
+        "auto_offset_reset": 'earliest',
+        "security_protocol": KAFKA_SECURITY_PROTOCOL,
+        "value_deserializer": lambda m: json.loads(m.decode('utf-8'))
+    }
+
+    if KAFKA_SECURITY_PROTOCOL == "SSL":
+        kwargs["ssl_cafile"] = KAFKA_SSL_CAFILE
+        kwargs["ssl_certfile"] = KAFKA_SSL_CERTFILE
+        kwargs["ssl_keyfile"] = KAFKA_SSL_KEYFILE
+
+    return KafkaConsumer(SYNC_CASE_TOPIC, SYNC_ALERT_TOPIC, **kwargs)
+
+def connect_kafka_producer():
+    kwargs = {
+        "bootstrap_servers": KAFKA_BOOTSTRAP,
+        "security_protocol": KAFKA_SECURITY_PROTOCOL
+    }
+    if KAFKA_SECURITY_PROTOCOL == "SSL":
+        kwargs["ssl_cafile"] = KAFKA_SSL_CAFILE
+        kwargs["ssl_certfile"] = KAFKA_SSL_CERTFILE
+        kwargs["ssl_keyfile"] = KAFKA_SSL_KEYFILE
+
+    return KafkaProducer(**kwargs)
 
 def connect_opensearch():
     return OpenSearch(
         hosts=[{'host': OPENSEARCH_HOST, 'port': OPENSEARCH_PORT}],
         http_compress=True,
         use_ssl=OPENSEARCH_USE_SSL,
-        verify_certs=False # Self-signed in dev/internal
+        verify_certs=OPENSEARCH_USE_SSL # Self-signed in dev/internal might need False, but explicit is better
     )
 
 def handle_case_sync(event, os_client, producer):
@@ -179,10 +207,7 @@ def main():
 
     try:
         consumer = connect_kafka_consumer()
-        producer = KafkaProducer(
-            bootstrap_servers=KAFKA_BOOTSTRAP,
-            security_protocol=KAFKA_SECURITY_PROTOCOL
-        )
+        producer = connect_kafka_producer()
     except Exception as e:
         logger.error(f"Failed to connect to Kafka: {e}")
         sys.exit(1)

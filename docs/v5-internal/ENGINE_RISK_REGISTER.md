@@ -20,3 +20,20 @@
 1.  **mTLS:** All bridge services must communicate over mTLS.
 2.  **AuthContext:** Bridge services run as trusted system components but validate tenant IDs against existing resources.
 3.  **Audit:** All sync events are audited.
+
+### Risk-019: Outbox Backlog Growth
+
+**Description:** If the publisher fails or Redpanda is down, the `v4_outbox` table may grow indefinitely.
+**Impact:** High. Storage exhaustion on v4 DB.
+**Mitigation:**
+1.  **Monitoring:** Alert on `outbox_backlog_total`.
+2.  **Circuit Breaker:** Stop v4 writes if outbox full (optional, severe) OR auto-scale publisher.
+3.  **Retention:** Prune PUBLISHED rows after X days.
+
+### Risk-020: Bridge Event Forgery
+
+**Description:** Malicious injection of events into bridge topics could corrupt v5.
+**Impact:** Critical.
+**Mitigation:**
+1.  **ACLs:** Only `v4-outbox-publisher` can write to `bridge.*`.
+2.  **TLS:** Strict mTLS enforcement (B1.1 requirement).

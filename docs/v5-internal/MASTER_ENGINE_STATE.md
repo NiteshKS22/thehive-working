@@ -357,3 +357,13 @@ Harden the engine for production deployment (GA readiness).
 **Pending:**
 -   v4-Side Outbox Publisher (Requires v4 code access/DB trigger).
 -   Full end-to-end integration tests.
+
+## Phase B1.1 - v4 Outbox Publisher (Active)
+**Status:** In Progress
+**Objective:** Enable v4 to publish authoritative events to v5.
+**Implemented Components:**
+-   `migration/v4_outbox_schema.sql`
+-   `v4-bridge/v4-outbox-publisher` (Service)
+-   `bridge.v4.*` topics
+**Pending:**
+-   Integration with actual v4 codebase (trigger/hook implementation).

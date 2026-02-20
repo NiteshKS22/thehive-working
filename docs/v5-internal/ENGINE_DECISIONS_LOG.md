@@ -202,3 +202,26 @@ We will implement a **Strangler Fig Pattern** with an **Event Outbox** on the v4
 ### Compliance
 -   **Tenant Isolation:** Enforced by the trusted publisher.
 -   **Zero Trust:** v5 services treat bridge events as external inputs requiring validation.
+
+## ADR-031: v4 Outbox Pattern for Bridge Publishing (Phase B1.1)
+
+### Status
+Accepted
+
+### Context
+We need to emit domain events from the legacy v4 system to the v5 event spine without modifying v4's core business logic or risking dual-write inconsistencies.
+
+### Decision
+We will use the **Transactional Outbox Pattern**.
+1.  **Additive Schema:** A `v4_outbox` table is added to the v4 database.
+2.  **Publisher Service:** A standalone `v4-outbox-publisher` polls this table (using `SKIP LOCKED`) and publishes to Redpanda.
+3.  **Idempotency:** Each outbox record has a deterministic UUID. Kafka keys are stable (`tenant:type:id`).
+4.  **Reversibility:** The publisher can be stopped instantly. The table remains but processing halts.
+
+### Consequences
+-   **Pros:** Atomic with v4 state changes (if v4 writes to outbox in same tx). Decoupled from v4 runtime performance (async).
+-   **Cons:** Polling introduces slight latency. Requires new service to manage.
+
+### Compliance
+-   **Tenant Isolation:** `tenant_id` is mandatory in the outbox schema and must be populated by the v4 application from authoritative context.
+-   **Security:** Publisher uses SSL/TLS for Kafka.

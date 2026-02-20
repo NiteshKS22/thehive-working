@@ -110,3 +110,12 @@ flowchart TD
 1.  `v4-sync-service` supports SSL/TLS via `KAFKA_SECURITY_PROTOCOL=SSL` and CA/Cert/Key env vars.
 2.  If SSL is not configured, the service logs a warning on startup.
 3.  Production deployment MUST enable SSL.
+
+### Threat-036: Outbox Tampering
+
+**Risk:** An attacker with SQL access to v4 DB could insert fake events into `v4_outbox`.
+**Status:** MITIGATED.
+**Mitigation:**
+1.  **Database Access Controls:** Restrict write access to `v4_outbox` to the v4 app user.
+2.  **Publisher Validation:** Publisher validates `tenant_id` format and consistency where possible.
+3.  **Audit:** All outbox writes are part of the v4 audit trail.

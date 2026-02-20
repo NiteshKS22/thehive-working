@@ -1,22 +1,48 @@
-from fastapi import FastAPI, HTTPException, Query, Body, Depends, status
-from opensearchpy import OpenSearch
+import time
+import uuid
+import json
+import logging
+import sys
 import os
 import psycopg2
-import time
 import hashlib
 import itertools
-import sys
-from typing import List, Optional, Dict, Any
+from fastapi import FastAPI, HTTPException, Response, status, Depends, Body, Query
+from opensearchpy import OpenSearch
+from typing import Dict, Any, Optional, List
 
 # Mount Common Auth
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../common')))
-from auth.middleware import get_auth_context, AuthContext, require_role, validate_auth_config
+from auth.middleware import get_auth_context, AuthContext, validate_auth_config, require_permission
+from auth.rbac import PERM_ALERT_READ, PERM_CASE_READ, PERM_RULE_SIMULATE
+from observability.metrics import MetricsMiddleware, get_metrics_response
+from observability.health import global_health_registry
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
+logger = logging.getLogger("query-service")
 
 app = FastAPI(title="TheHive v5 Query Service")
+
+app.add_middleware(MetricsMiddleware, service_name="query-api-service")
 
 @app.on_event("startup")
 def startup_event():
     validate_auth_config()
+    
+    def check_os():
+        return os_client.ping()
+        
+    def check_pg():
+        try:
+            conn = get_db_conn()
+            conn.close()
+            return True
+        except:
+            return False
+            
+    global_health_registry.add_check("opensearch", check_os)
+    global_health_registry.add_check("postgres", check_pg)
 
 # Configuration
 OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "opensearch")
@@ -47,25 +73,31 @@ def get_db_conn():
         print(f"DB Connection failed: {e}")
         raise HTTPException(status_code=500, detail="Database connection failed")
 
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+@app.get("/readyz")
+def readyz():
+    result = global_health_registry.check_health()
+    if result["status"] != "ok":
+        return Response(content=json.dumps(result), status_code=503, media_type="application/json")
+    return result
+
+@app.get("/metrics")
+def metrics():
+    return get_metrics_response()
+
 @app.get("/health")
 def health_check():
-    os_status = "connected" if os_client.ping() else "disconnected"
-    pg_status = "disconnected"
-    try:
-        conn = get_db_conn()
-        conn.close()
-        pg_status = "connected"
-    except:
-        pass
-
-    return {"status": "ok", "opensearch": os_status, "postgres": pg_status}
+    return healthz()
 
 @app.get("/alerts")
 def search_alerts(
     q: str = Query(None, description="Simple query string"),
     size: int = 20,
     from_: int = 0,
-    auth: AuthContext = Depends(get_auth_context)
+    auth: AuthContext = Depends(require_permission(PERM_ALERT_READ))
 ):
     query_body = {
         "query": {
@@ -95,7 +127,7 @@ def search_alerts(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/alerts/{alert_id}")
-def get_alert(alert_id: str, auth: AuthContext = Depends(get_auth_context)):
+def get_alert(alert_id: str, auth: AuthContext = Depends(require_permission(PERM_ALERT_READ))):
     query_body = {
         "query": {
             "bool": {
@@ -119,7 +151,7 @@ def search_groups(
     status: Optional[str] = Query(None, regex="^(OPEN|CLOSED|MERGED)$"),
     size: int = 20,
     from_: int = 0,
-    auth: AuthContext = Depends(get_auth_context)
+    auth: AuthContext = Depends(require_permission(PERM_CASE_READ))
 ):
     query_body = {
         "query": {
@@ -154,7 +186,7 @@ def search_groups(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/groups/{group_id}")
-def get_group(group_id: str, auth: AuthContext = Depends(get_auth_context)):
+def get_group(group_id: str, auth: AuthContext = Depends(require_permission(PERM_CASE_READ))):
     doc_id = f"{auth.tenant_id}:{group_id}"
     try:
         response = os_client.get(index=INDEX_GROUPS, id=doc_id)
@@ -187,7 +219,7 @@ def get_group(group_id: str, auth: AuthContext = Depends(get_auth_context)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/groups/{group_id}/alerts")
-def get_group_alerts(group_id: str, auth: AuthContext = Depends(get_auth_context)):
+def get_group_alerts(group_id: str, auth: AuthContext = Depends(require_permission(PERM_CASE_READ))):
     conn = get_db_conn()
     links = []
     try:
@@ -239,7 +271,7 @@ def get_group_alerts(group_id: str, auth: AuthContext = Depends(get_auth_context
     return {"total": len(results), "hits": results}
 
 @app.get("/rules")
-def list_rules(auth: AuthContext = Depends(get_auth_context)):
+def list_rules(auth: AuthContext = Depends(require_permission(PERM_RULE_SIMULATE))):
     # Assuming rules are global read, but authenticated
     conn = get_db_conn()
     try:
@@ -264,7 +296,7 @@ def list_rules(auth: AuthContext = Depends(get_auth_context)):
 @app.post("/rules/simulate")
 def simulate_rules(
     alert_payload: Dict[str, Any] = Body(...),
-    auth: AuthContext = Depends(get_auth_context) # Require Auth, implicit Tenant
+    auth: AuthContext = Depends(require_permission(PERM_RULE_SIMULATE)) # Require Auth, implicit Tenant
 ):
     conn = get_db_conn()
     rules = []
@@ -330,3 +362,112 @@ def simulate_rules(
                 continue
 
     return {"matches": matches}
+
+# E3: Case Domain Read Endpoints (Proxied to Query API for unified read surface)
+# Implementation: Direct Postgres Read
+@app.get("/cases")
+def list_cases(
+    status: Optional[str] = Query(None, regex="^(OPEN|CLOSED)$"),
+    severity: Optional[int] = None,
+    limit: int = 20,
+    offset: int = 0,
+    auth: AuthContext = Depends(require_permission(PERM_CASE_READ))
+):
+    conn = get_db_conn()
+    try:
+        with conn.cursor() as cur:
+            query = "SELECT case_id, title, status, severity, created_at, updated_at, assigned_to FROM cases WHERE tenant_id = %s"
+            params = [auth.tenant_id]
+            
+            if status:
+                query += " AND status = %s"
+                params.append(status)
+            if severity:
+                query += " AND severity = %s"
+                params.append(severity)
+            
+            query += " ORDER BY updated_at DESC LIMIT %s OFFSET %s"
+            params.append(limit)
+            params.append(offset)
+            
+            cur.execute(query, tuple(params))
+            rows = cur.fetchall()
+            
+            cases = []
+            for r in rows:
+                cases.append({
+                    "case_id": r[0],
+                    "title": r[1],
+                    "status": r[2],
+                    "severity": r[3],
+                    "created_at": r[4],
+                    "updated_at": r[5],
+                    "assigned_to": r[6]
+                })
+            
+            cur.execute("SELECT COUNT(*) FROM cases WHERE tenant_id = %s", (auth.tenant_id,))
+            total = cur.fetchone()[0]
+            
+            return {"total": total, "cases": cases}
+    finally:
+        conn.close()
+
+@app.get("/cases/{case_id}")
+def get_case(case_id: str, auth: AuthContext = Depends(require_permission(PERM_CASE_READ))):
+    conn = get_db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT title, description, severity, status, created_by, assigned_to, created_at, updated_at, closed_at FROM cases WHERE tenant_id = %s AND case_id = %s",
+                (auth.tenant_id, case_id)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Case not found")
+            
+            return {
+                "case_id": case_id,
+                "title": row[0],
+                "description": row[1],
+                "severity": row[2],
+                "status": row[3],
+                "created_by": row[4],
+                "assigned_to": row[5],
+                "created_at": row[6],
+                "updated_at": row[7],
+                "closed_at": row[8]
+            }
+    finally:
+        conn.close()
+
+@app.get("/cases/{case_id}/timeline")
+def get_case_timeline(case_id: str, auth: AuthContext = Depends(require_permission(PERM_CASE_READ))):
+    conn = get_db_conn()
+    timeline = []
+    try:
+        with conn.cursor() as cur:
+            # Verify case exists
+            cur.execute("SELECT 1 FROM cases WHERE tenant_id = %s AND case_id = %s", (auth.tenant_id, case_id))
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Case not found")
+
+            # Get Tasks
+            cur.execute("SELECT task_id, title, status, created_by, created_at FROM case_tasks WHERE tenant_id = %s AND case_id = %s", (auth.tenant_id, case_id))
+            for r in cur.fetchall():
+                timeline.append({"type": "task", "id": r[0], "title": r[1], "status": r[2], "user": r[3], "ts": r[4]})
+            
+            # Get Notes
+            cur.execute("SELECT note_id, body, created_by, created_at FROM case_notes WHERE tenant_id = %s AND case_id = %s", (auth.tenant_id, case_id))
+            for r in cur.fetchall():
+                timeline.append({"type": "note", "id": r[0], "body": r[1], "user": r[2], "ts": r[3]})
+                
+            # Get Links
+            cur.execute("SELECT original_event_id, linked_by, linked_at, link_reason FROM case_alert_links WHERE tenant_id = %s AND case_id = %s", (auth.tenant_id, case_id))
+            for r in cur.fetchall():
+                timeline.append({"type": "link", "alert_id": r[0], "user": r[1], "ts": r[2], "reason": r[3]})
+                
+    finally:
+        conn.close()
+    
+    timeline.sort(key=lambda x: x['ts'], reverse=True)
+    return {"case_id": case_id, "timeline": timeline}

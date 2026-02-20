@@ -111,3 +111,66 @@ INSERT INTO role_permissions (role_id, permission_id) VALUES
 ('SYSTEM_ADMIN', 'rules.write'),
 ('SYSTEM_ADMIN', 'correlation.disable')
 ON CONFLICT DO NOTHING;
+
+-- Phase E3 Schema: Case Management Domain
+
+CREATE TABLE IF NOT EXISTS cases (
+    tenant_id VARCHAR(64) NOT NULL,
+    case_id UUID NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    severity INT NOT NULL DEFAULT 1,
+    status VARCHAR(32) NOT NULL CHECK (status IN ('OPEN', 'CLOSED')),
+    created_by VARCHAR(255) NOT NULL,
+    assigned_to VARCHAR(255) NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    closed_at BIGINT NULL,
+    PRIMARY KEY (tenant_id, case_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cases_tenant_status ON cases(tenant_id, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cases_tenant_severity ON cases(tenant_id, severity, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS case_tasks (
+    tenant_id VARCHAR(64) NOT NULL,
+    case_id UUID NOT NULL,
+    task_id UUID NOT NULL,
+    title TEXT NOT NULL,
+    status VARCHAR(32) NOT NULL CHECK (status IN ('OPEN', 'DONE', 'CANCELLED')),
+    created_by VARCHAR(255) NOT NULL,
+    assigned_to VARCHAR(255) NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (tenant_id, case_id, task_id),
+    FOREIGN KEY (tenant_id, case_id) REFERENCES cases(tenant_id, case_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_tenant_case ON case_tasks(tenant_id, case_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS case_notes (
+    tenant_id VARCHAR(64) NOT NULL,
+    case_id UUID NOT NULL,
+    note_id UUID NOT NULL,
+    body TEXT NOT NULL,
+    created_by VARCHAR(255) NOT NULL,
+    created_at BIGINT NOT NULL,
+    PRIMARY KEY (tenant_id, case_id, note_id),
+    FOREIGN KEY (tenant_id, case_id) REFERENCES cases(tenant_id, case_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_notes_tenant_case ON case_notes(tenant_id, case_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS case_alert_links (
+    tenant_id VARCHAR(64) NOT NULL,
+    case_id UUID NOT NULL,
+    original_event_id VARCHAR(64) NOT NULL,
+    linked_by VARCHAR(255) NOT NULL,
+    linked_at BIGINT NOT NULL,
+    link_reason TEXT NULL,
+    PRIMARY KEY (tenant_id, case_id, original_event_id),
+    FOREIGN KEY (tenant_id, case_id) REFERENCES cases(tenant_id, case_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_case_links_tenant_alert ON case_alert_links(tenant_id, original_event_id);
+CREATE INDEX IF NOT EXISTS idx_case_links_tenant_case ON case_alert_links(tenant_id, case_id, linked_at DESC);

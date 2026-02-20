@@ -63,3 +63,21 @@ JSON Schema definitions for core events:
   - `linked_at`: Timestamp of linking.
   - `link_reason`: Explanation (e.g., "Rule: Same host").
   - `tenant_id`: Mandatory tenant scope.
+
+## Case Events (Phase E3)
+
+### `cases.created.v1`
+- **Type**: `CaseCreated`
+- **Payload**: `{ case_id, title, created_by }`
+
+### `cases.updated.v1`
+- **Type**: `CaseUpdated`
+- **Payload**: `{ case_id, updates, updated_by }`
+
+### `cases.closed.v1`
+- **Type**: `CaseClosed`
+- **Payload**: `{ case_id, closed_by }`
+
+### `cases.alert.linked.v1`
+- **Type**: `CaseAlertLinked`
+- **Payload**: `{ case_id, original_event_id }`

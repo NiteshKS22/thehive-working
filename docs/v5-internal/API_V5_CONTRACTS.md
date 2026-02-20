@@ -53,3 +53,31 @@
 All v5 APIs require `Authorization: Bearer <JWT>`.
 - **Claims Required**: `sub`, `tenant_id`, `roles`, `exp`, `iss`.
 - **Tenant Scope**: APIs default to the `tenant_id` in the token. Query parameters for tenant overrides are deprecated/removed.
+
+## Case Management API (Phase E3)
+
+### Create Case
+- **POST** `/cases`
+- **Permission**: `case:write`
+- **Input**: `{ title, description, severity, assigned_to }`
+- **Output**: `{ case_id, status: "created" }`
+
+### Update Case
+- **PATCH** `/cases/{case_id}`
+- **Permission**: `case:write`
+- **Input**: `{ title, status, ... }`
+
+### Get Case
+- **GET** `/cases/{case_id}`
+- **Permission**: `case:read`
+- **Output**: Case details.
+
+### List Cases
+- **GET** `/cases`
+- **Permission**: `case:read`
+- **Params**: `status`, `severity`, `limit`, `offset`
+
+### Link Alert
+- **POST** `/cases/{case_id}/alerts`
+- **Permission**: `case:write`
+- **Input**: `{ original_event_id, link_reason }`

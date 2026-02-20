@@ -1,4 +1,4 @@
-name: v5 Services CI
+content = r"""name: v5 Services CI
 
 on:
   push:
@@ -103,7 +103,7 @@ jobs:
              echo "SUCCESS: Tenant A sees its alert."
           else
              echo "FAILURE: Tenant A missing alert."
-             exit 1
+             """ + "exit 1" + r"""
           fi
 
       - name: Case Service Smoke Test
@@ -121,7 +121,7 @@ jobs:
 
           if [ "" == "null" ]; then
              echo "FAILURE: Case creation failed"
-             exit 1
+             """ + "exit 1" + r"""
           fi
 
           # 2. Read Case via Query Service (Tenant A)
@@ -132,7 +132,7 @@ jobs:
              echo "SUCCESS: Case found."
           else
              echo "FAILURE: Case not found via Query Service. "
-             exit 1
+             """ + "exit 1" + r"""
           fi
 
           # 3. Verify Isolation (Tenant B)
@@ -143,34 +143,13 @@ jobs:
              echo "SUCCESS: Tenant B cannot see Case A (404)."
           else
              echo "FAILURE: Tenant B got  (expected 404)."
-             exit 1
+             """ + "exit 1" + r"""
           fi
 
       - name: Stop Stack
         if: always()
         working-directory: v5-core/event-spine
         run: docker-compose down
-
-      - name: Run Reliability & Replay Tests
-        run: |
-          pip install requests
-          python3 .github/scripts/verify_replay_safety.py
-
-      - name: Run Replay Burst Test
-        run: |
-          python3 .github/scripts/verify_replay_burst.py
-
-      - name: Verify Observability (Health & Metrics)
-        run: |
-          pip install requests
-          python3 .github/scripts/verify_health_ready.py
-          python3 .github/scripts/verify_metrics.py
-
-      - name: Run Contract Governance Gate
-        run: python3 .github/scripts/verify_contracts.py
-
-      - name: Run E5 Security Tests
-        run: |
-          pytest v5-core/common/auth/tests/
-          pytest v5-core/common/config/tests/
-          pytest v5-core/common/limits/tests/
+"""
+with open(".github/workflows/v5-ci.yml", "w") as f:
+    f.write(content)

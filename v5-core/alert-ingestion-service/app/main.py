@@ -12,7 +12,10 @@ from kafka.errors import KafkaError
 
 # Import Auth Middleware
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../common')))
-from auth.middleware import get_auth_context, AuthContext, validate_auth_config
+from auth.middleware import get_auth_context, AuthContext, validate_auth_config, require_permission
+from auth.rbac import PERM_ALERT_INGEST
+from observability.metrics import MetricsMiddleware, get_metrics_response
+from observability.health import global_health_registry
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
@@ -20,9 +23,18 @@ logger = logging.getLogger("ingest-service")
 
 app = FastAPI(title="TheHive v5 Ingestion Service")
 
+# Observability
+app.add_middleware(MetricsMiddleware, service_name="alert-ingestion-service")
+
 @app.on_event("startup")
 def startup_event():
     validate_auth_config()
+    
+    # Health Checks
+    def check_kafka():
+        return producer and producer.bootstrap_connected()
+    
+    global_health_registry.add_check("kafka", check_kafka)
 
 # Configuration
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "redpanda:29092")
@@ -50,11 +62,24 @@ class Alert(BaseModel):
     pap: int = Field(default=2, ge=0, le=3)
     artifacts: list = []
 
-@app.get("/health")
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+@app.get("/readyz")
+def readyz():
+    result = global_health_registry.check_health()
+    if result["status"] != "ok":
+        return Response(content=json.dumps(result), status_code=503, media_type="application/json")
+    return result
+
+@app.get("/metrics")
+def metrics():
+    return get_metrics_response()
+
+@app.get("/health") # Legacy alias
 def health_check():
-    if producer and producer.bootstrap_connected():
-        return {"status": "ok", "kafka": "connected"}
-    return {"status": "ok", "kafka": "disconnected"}
+    return healthz()
 
 @app.post("/ingest", status_code=202)
 async def ingest_alert(
@@ -62,7 +87,7 @@ async def ingest_alert(
     response: Response,
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
     trace_id: Optional[str] = Header(None, alias="X-Trace-Id"),
-    auth: AuthContext = Depends(get_auth_context) # Require Auth
+    auth: AuthContext = Depends(require_permission(PERM_ALERT_INGEST)) # Require Permission
 ):
     if not trace_id:
         trace_id = str(uuid.uuid4())

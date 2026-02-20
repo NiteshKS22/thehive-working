@@ -122,3 +122,59 @@ This document tracks significant architectural decisions for the v5-Internal eng
 - **Context**: Correlation service downtime shouldn't stop ingestion.
 - **Decision**: Ingestion/Dedup/Indexing are decoupled from Correlation. If Correlation Service dies, alerts are still ingested and indexed (just not grouped).
 - **Status**: Active (Phase 3D).
+
+## ADR-021: Granular RBAC Permissions
+- **Context**: Role-based access control (RBAC) was too coarse (Admin/Analyst/Ingest).
+- **Decision**: Implement fine-grained permissions (e.g., `alert:read`, `case:update`) mapped from roles. Enforce permissions in middleware.
+- **Rationale**: Allows flexible policy definition and strict least-privilege enforcement.
+- **Status**: Active (Phase E2).
+
+## ADR-022: Postgres for Case Domain Storage
+- **Context**: Case management requires transactional consistency (ACID) for tasks, notes, and state.
+- **Decision**: Use PostgreSQL (existing cluster) with new tenant-isolated tables.
+- **Rationale**: Relations (Tasks <-> Cases) are strictly hierarchical. No need for NoSQL or Search engine for primary state.
+- **Status**: Active (Phase E3).
+
+## ADR-023: CQRS-Lite for Case APIs
+- **Context**: We need to separate Write logic (Case Service) from Read logic (Query Service) to maintain architecture symmetry.
+- **Decision**: `case-service` handles Writes. `query-api-service` handles Reads (proxying to Postgres for E3).
+- **Rationale**: Keeps  focused on business rules/side-effects.  remains the single pane of glass.
+- **Status**: Active (Phase E3).
+
+## ADR-024: Standardized Commit & DLQ Strategy
+- **Context**: Consumers had inconsistent commit behavior (some auto, some manual).
+- **Decision**: All consumers MUST disable auto-commit. Offsets are committed ONLY after processing success OR successful DLQ publish. If DLQ fails, offsets are NOT committed (fail-safe).
+- **Rationale**: Prevents data loss (At-Least-Once). Ensures bad data is quarantined without blocking the pipeline.
+- **Status**: Active (Phase E4.1).
+
+## ADR-025: Backpressure & Retry Policy
+- **Context**: Consumers were at risk of OOM on large bursts and infinite loops on transient errors.
+- **Decision**: 
+    1. Limit `max_poll_records` to 100.
+    2. Implement 3x exponential backoff retry for transient errors.
+    3. Implement explicit sleep backpressure if processing exceeds thresholds.
+- **Status**: Active (Phase E4.2).
+
+## ADR-026: Observability Standards
+- **Context**: Services lacked visibility into internal state (consumer lag, errors).
+- **Decision**: 
+    1. All HTTP services expose Prometheus metrics on `/metrics`.
+    2. All Workers expose Prometheus metrics on dedicated internal ports (900X).
+    3. Standardize on `/healthz` (always 200) and `/readyz` (dependency check).
+- **Rationale**: Enables K8s probes and Prometheus scraping without vendor lock-in.
+- **Status**: Active (Phase E4.3).
+
+## ADR-027: Secrets Loading Strategy
+- **Context**: Hardcoded secrets and simple env vars are insufficient for secure orchestration.
+- **Decision**: Use a helper that prefers `/run/secrets/<name>` over `ENV`. Fail startup if required secrets are missing.
+- **Status**: Active (Phase E5).
+
+## ADR-028: RS256/JWKS Enforcement
+- **Context**: HS256 shared secrets scale poorly and are less secure.
+- **Decision**: Enforce RS256 with OIDC discovery (JWKS) in non-dev environments. Cache keys in memory.
+- **Status**: Active (Phase E5).
+
+## ADR-029: Tenant-Isolated Rate Limiting
+- **Context**: No protection against noisy tenants.
+- **Decision**: Implement sliding window limit per tenant (via AuthContext). Return 429.
+- **Status**: Active (Phase E5).

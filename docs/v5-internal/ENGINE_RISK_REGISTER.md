@@ -14,7 +14,7 @@ This document tracks known security, reliability, and operational risks for the 
 |----|-------|----------|--------|------------|------------------|------|-----------------|-------|--------|----------|----------|
 | R-001 | Auth Misconfiguration (RS256) | Security | Critical | Possible | Startup Guardrail checks keys | Auto-rotation missing | E2: Implement JWKS rotation | SecArch | In Progress | M | `middleware.py` |
 | R-002 | DEV_MODE Privilege Escalation | Security | Critical | Unlikely | Strict `ALLOW_DEV_OVERRIDES` check | Env var leaks | E5: Secrets Mgmt (Vault) | Ops | Mitigated | L | `middleware.py` |
-| R-003 | Tenant Isolation Regression | Security | Critical | Unlikely | Middleware Enforcement + Query Filters | Manual code reviews | E2: OPA Policy Enforcement | Backend | Mitigated | L | `v5-ci.yml` |
+| R-003 | Tenant Isolation Regression | Security | Critical | Unlikely | Middleware Enforcement + Query Filters | Manual code reviews | E2: Granular Perms Policy Enforcement | Backend | Mitigated | L | `v5-ci.yml` |
 | R-004 | OpenSearch Index Corruption | Data | High | Unlikely | Query API validates tenant_id on fetch | None | E4: Index Checksums | Ops | Accepted | M | `query-api-service/app/main.py` |
 | R-005 | At-Most-Once Data Loss | Reliability | High | Possible | Commit only on success/DLQ | DLQ could fill up | E4: DLQ Monitoring/Alerts | Ops | In Progress | M | `correlation-service/app/main.py` |
 | R-006 | Backpressure / Consumer Lag | Performance | High | Likely | None (Redpanda buffers) | No Autoscaling | E4: KEDA Autoscaling | Ops | Open | H | `docker-compose.yml` (limits) |
@@ -34,7 +34,7 @@ This document tracks known security, reliability, and operational risks for the 
 | R-020 | Index Retention Manual | Operational | Medium | Likely | Monthly Indices | ISM Policies | E5: Auto ISM Config | Ops | Open | M | `RETENTION.md` |
 | R-021 | ID Collision (UUIDv4) | Data | Critical | Unlikely | UUIDv4 (122 bits) | None | Accepted Risk | Arch | Accepted | L | `main.py` |
 | R-022 | Observability Gaps | Operational | High | Likely | Logs | Metrics/Dashboards | E5: Grafana Boards | Ops | Open | H | - |
-| R-023 | RBAC Wiring Mistakes | Security | High | Unlikely | Unit Tests | Policy as Code | E2: OPA | SecArch | Mitigated | M | `test_middleware.py` |
+| R-023 | RBAC Wiring Mistakes | Security | High | Unlikely | Unit Tests | Policy as Code | E2: Granular Perms | SecArch | Mitigated | M | `test_middleware.py` |
 | R-024 | Data Residency / PII | Compliance | High | Unlikely | Tenant Isolation | PII Masking | E2: Field Encryption | Legal | Open | H | - |
 | R-025 | v4 Bridge Absence | Strategic | Critical | Certain | None | Manual Parallel Run | E3: v4-Bridge Sync | PM | Open | C | `MASTER_ENGINE_STATE.md` |
 
@@ -42,3 +42,12 @@ This document tracks known security, reliability, and operational risks for the 
 - **R-025 (v4 Bridge)**: Accepted for Phase E1. Migration strategy (Phase 4) will address this.
 - **R-021 (UUID Collision)**: Mathematical improbability accepted standard industry practice.
 - **R-016 (mTLS)**: Deferring to Platform Phase (E2) to avoid complexity spikes now.
+| R-026 | Authorization Bypass (Role-Only) | Security | Critical | Unlikely | Middleware requires permissions, not just roles | None | E2: Granular RBAC | SecArch | Closed | L | `rbac.py` |
+| R-027 | Case Data Leakage | Data | High | Unlikely | Tenant Isolation in PK + AuthContext | None | E3: CI Tests | Backend | Mitigated | L | `v5-ci.yml` |
+| R-028 | Case Idempotency Failure | Reliability | Medium | Possible | Manual UUIDs + DB Constraints | None | E3: Idempotency Keys | Backend | Mitigated | L | `main.py` |
+| R-029 | DLQ Outage Blocking | Operational | High | Possible | Consumer halts if DLQ fails | Alerts | E4.1: Monitor DLQ health | Ops | Mitigated | M | `dlq.py` |
+| R-030 | Replay Storm Overload | Operational | Medium | Likely | Backpressure + Rate Limiting | None | E4.2: CI Burst Test | Backend | Mitigated | L | `backpressure.py` |
+| R-031 | Observability Gaps | Operational | High | Likely | Prometheus Metrics + Health Checks | None | E4.3: Dashboards | Ops | Mitigated | L | `metrics.py` |
+| R-032 | Secret Leakage via Env | Security | High | Unlikely | Secrets Loader (File Priority) | None | E5: Vault | Ops | Mitigated | L | `secrets.py` |
+| R-033 | Auth Key Compromise | Security | Critical | Unlikely | RS256 + Key Rotation | None | E5: OIDC | SecArch | Mitigated | L | `oidc.py` |
+| R-034 | API Abuse (DoS) | Operational | High | Possible | Rate Limiting Middleware | Distributed State | E5: Redis Limiter | Backend | Mitigated | M | `rate_limit.py` |

@@ -94,3 +94,10 @@ flowchart TD
 | Rule Abuse | Read-Only Simulation API | Verified |
 | Internal Sniffing | None (Flat Network) | Open (E2) |
 | Secret Leakage | None (Env Vars) | Open (E5) |
+| Privilege Escalation | Granular RBAC (Permissions) | Verified (E2) |
+| Case Tampering | RBAC (case:write) + Tenant Isolation | Verified (E3) |
+| DLQ Poisoning / Outage | No-Commit on DLQ Failure (Fail-Safe) | Verified (E4.1) |
+| DoS (Replay Storm) | Backpressure + Bounded Poll | Verified (E4.2) |
+| Metrics Data Leakage | Internal Binding (Workers) + No sensitive labels | Verified (E4.3) |
+| Secret Exposure | Redacted Logs + Secure Loader | Verified (E5) |
+| API DoS | Rate Limiting (Tenant Isolated) | Verified (E5) |

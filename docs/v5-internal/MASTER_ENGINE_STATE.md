@@ -290,3 +290,60 @@ Before moving full traffic:
 2.  Observability dashboards (Grafana) must be live.
 3.  Load testing (10k EPS) must pass.
 4.  Security Audit (Pen Test) of Query API.
+
+## Phase E3 — Case Management Domain
+
+### Objective
+Implement the backend logic for Case Management (Cases, Tasks, Notes, Links) within the v5 engine, decoupled from v4.
+
+### Why This Was Needed
+To prepare for UI migration and enable API-first case management.
+
+### Components Introduced
+- `case-service` (FastAPI): Handles Case mutations (Create, Update, Link).
+- `cases`, `case_tasks`, `case_notes`, `case_alert_links` tables (Postgres).
+
+### Architectural Decisions
+- **Postgres as Source of Truth**: Case state requires ACID compliance.
+- **CQRS-Lite**: `case-service` handles Writes. `query-api-service` handles Reads (proxying to Postgres for E3).
+- **Tenant Isolation**: Enforced via `tenant_id` in PKs and AuthContext.
+
+### Data Contracts
+- **Events**: `cases.created.v1`, `cases.updated.v1`, `cases.closed.v1`, etc.
+- **Payloads**: See `EVENT_MODEL.md`.
+
+## Phase E4.3 — Observability & Health
+
+### Objective
+Provide visibility into the black-box engine components.
+
+### Components Introduced
+- **Metrics Middleware**: Auto-instrumentation for HTTP services.
+- **Sidecar Metrics**: HTTP servers for Kafka workers.
+- **Health/Ready Probes**: Standardized /healthz and /readyz.
+
+### Standards
+- **Metrics Path**: `/metrics` (Prometheus format).
+- **Health Path**: `/healthz` (Liveness), `/readyz` (Readiness).
+- **Ports**: HTTP (8000-8002), Workers (9001-9004).
+
+## Phase E5 — Production Security & Platform
+
+### Objective
+Harden the engine for production deployment (GA readiness).
+
+### Components Introduced
+- **OIDC/JWKS**: RS256 enforcement, key caching.
+- **Secrets Loader**: Secure config management.
+- **Rate Limiting**: Token bucket per tenant.
+- **Contract Gate**: CI check for schema compliance.
+
+### Security Posture
+- **Auth**: Production-grade (Fail-Closed).
+- **Secrets**: Redacted in logs, loaded from file/env.
+- **DoS Protection**: Active.
+
+### Maturity Status: PRODUCTION-READY (Pending Frontend)
+- **v5-Internal** is now feature-complete for backend operations.
+- Security (Auth/Secrets/mTLS), Reliability (DLQ/Retry/Backpressure), and Observability (Metrics/Health) are implemented.
+- **Next**: Phase E6 (UI Migration & Legacy Sunset).

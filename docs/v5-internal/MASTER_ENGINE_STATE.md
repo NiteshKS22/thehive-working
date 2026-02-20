@@ -347,3 +347,13 @@ Harden the engine for production deployment (GA readiness).
 - **v5-Internal** is now feature-complete for backend operations.
 - Security (Auth/Secrets/mTLS), Reliability (DLQ/Retry/Backpressure), and Observability (Metrics/Health) are implemented.
 - **Next**: Phase E6 (UI Migration & Legacy Sunset).
+
+## Phase B1 - Bridge Layer (Active)
+**Status:** In Progress
+**Objective:** Bi-directional sync between v4-LTS and v5-Internal.
+**Implemented Components:**
+-   `docs/v5-internal/BRIDGE_EVENT_MODEL.md`
+-   `v5-core/v4-sync-service` (Consumer Adapter)
+**Pending:**
+-   v4-Side Outbox Publisher (Requires v4 code access/DB trigger).
+-   Full end-to-end integration tests.

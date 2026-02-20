@@ -178,3 +178,27 @@ This document tracks significant architectural decisions for the v5-Internal eng
 - **Context**: No protection against noisy tenants.
 - **Decision**: Implement sliding window limit per tenant (via AuthContext). Return 429.
 - **Status**: Active (Phase E5).
+
+## ADR-030: Strangler Bridge Architecture (Phase B1)
+
+### Status
+Accepted
+
+### Context
+To migrate from v4-LTS (Monolith) to v5-Internal (Microservices) without a "Big Bang" rewrite, we need a mechanism to synchronize state bi-directionally. v4 must remain the system of record for the UI during the transition.
+
+### Decision
+We will implement a **Strangler Fig Pattern** with an **Event Outbox** on the v4 side and a **Sync Adapter** on the v5 side.
+
+1.  **v4 Outbox:** v4 will write domain events to a transactional outbox table (or use a CDC-like trigger approach if feasible without intrusive code changes). A publisher process will read this outbox and publish to Redpanda.
+2.  **v5 Sync Adapter:** A new service, `v4-sync-service`, will consume these events and update the v5 Case/Alert stores.
+3.  **Conflict Resolution:** `GREATEST(updated_at)` logic will be used. In Phase B1, v4 is authoritative.
+4.  **Reversibility:** The bridge can be disabled via feature flag.
+
+### Consequences
+-   **Pros:** Enables incremental migration. Decouples v4 and v5 runtimes. Allows v5 to be "read-only" regarding state origin initially.
+-   **Cons:** Introduces eventual consistency latency. Requires careful handling of drift and conflicts. Adds operational complexity (monitoring the bridge).
+
+### Compliance
+-   **Tenant Isolation:** Enforced by the trusted publisher.
+-   **Zero Trust:** v5 services treat bridge events as external inputs requiring validation.

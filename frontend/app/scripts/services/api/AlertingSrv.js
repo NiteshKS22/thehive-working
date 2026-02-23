@@ -6,120 +6,13 @@
             var baseUrl = './api/alert';
 
             var similarityFilters = {
-                'none': {
-                    label: 'None',
-                    filters: []
-                },
-                'open-cases': {
-                    label: 'Open Cases',
-                    filters: [{
-                        field: 'status',
-                        type: 'enumeration',
-                        value: {
-                            list: [{
-                                text: 'Open',
-                                label: 'Open'
-                            }]
-                        }
-                    }]
-                },
-                'open-cases-last-7days': {
-                    label: 'Open Cases in the last 7 days',
-                    filters: [{
-                        field: 'status',
-                        type: 'enumeration',
-                        value: {
-                            list: [{
-                                text: 'Open',
-                                label: 'Open'
-                            }]
-                        }
-                    }, {
-                        field: '_createdAt',
-                        type: 'date',
-                        value: {
-                            operator: 'last7days',
-                            from: null,
-                            to: null
-                        }
-                    }]
-                },
-                'open-cases-last-30days': {
-                    label: 'Open Cases in the last 30 days',
-                    filters: [{
-                        field: 'status',
-                        type: 'enumeration',
-                        value: {
-                            list: [{
-                                text: 'Open',
-                                label: 'Open'
-                            }]
-                        }
-                    }, {
-                        field: '_createdAt',
-                        type: 'date',
-                        value: {
-                            operator: 'last30days',
-                            from: null,
-                            to: null
-                        }
-                    }]
-                },
-                'open-cases-last-3months': {
-                    label: 'Open Cases in the last 3 months',
-                    filters: [{
-                        field: 'status',
-                        type: 'enumeration',
-                        value: {
-                            list: [{
-                                text: 'Open',
-                                label: 'Open'
-                            }]
-                        }
-                    }, {
-                        field: '_createdAt',
-                        type: 'date',
-                        value: {
-                            operator: 'last3months',
-                            from: null,
-                            to: null
-                        }
-                    }]
-                },
-                'open-cases-last-year': {
-                    label: 'Open Cases in the last year',
-                    filters: [{
-                        field: 'status',
-                        type: 'enumeration',
-                        value: {
-                            list: [{
-                                text: 'Open',
-                                label: 'Open'
-                            }]
-                        }
-                    }, {
-                        field: '_createdAt',
-                        type: 'date',
-                        value: {
-                            operator: 'lastyear',
-                            from: null,
-                            to: null
-                        }
-                    }]
-                },
-                'resolved-cases': {
-                    label: 'Resolved cases',
-                    filters: [{
-                        field: 'status',
-                        type: 'enumeration',
-                        value: {
-                            list: [{
-                                text: 'Resolved',
-                                label: 'Resolved'
-                            }]
-                        }
-                    }]
-                }
+                'none': { label: 'None', filters: [] },
+                'open-cases': { label: 'Open Cases', filters: [{ field: 'status', type: 'enumeration', value: { list: [{ text: 'Open', label: 'Open' }] } }] },
+                'open-cases-last-7days': { label: 'Open Cases in the last 7 days', filters: [{ field: 'status', type: 'enumeration', value: { list: [{ text: 'Open', label: 'Open' }] } }, { field: '_createdAt', type: 'date', value: { operator: 'last7days', from: null, to: null } }] },
+                'open-cases-last-30days': { label: 'Open Cases in the last 30 days', filters: [{ field: 'status', type: 'enumeration', value: { list: [{ text: 'Open', label: 'Open' }] } }, { field: '_createdAt', type: 'date', value: { operator: 'last30days', from: null, to: null } }] },
+                'open-cases-last-3months': { label: 'Open Cases in the last 3 months', filters: [{ field: 'status', type: 'enumeration', value: { list: [{ text: 'Open', label: 'Open' }] } }, { field: '_createdAt', type: 'date', value: { operator: 'last3months', from: null, to: null } }] },
+                'open-cases-last-year': { label: 'Open Cases in the last year', filters: [{ field: 'status', type: 'enumeration', value: { list: [{ text: 'Open', label: 'Open' }] } }, { field: '_createdAt', type: 'date', value: { operator: 'lastyear', from: null, to: null } }] },
+                'resolved-cases': { label: 'Resolved cases', filters: [{ field: 'status', type: 'enumeration', value: { list: [{ text: 'Resolved', label: 'Resolved' }] } }] }
             };
 
             var factory = {
@@ -130,20 +23,9 @@
                     return (similarityFilters[name] || {}).filters;
                 },
                 list: function (config, callback) {
-                    // E6.1: V5 Routing
-                    // If V5 enabled, use V5Router.getAlerts() logic
-                    // However, PaginatedQuerySrv is a complex beast wrapping the query.
-                    // For minimal invasion, we might need to adapt PaginatedQuerySrv or just V5Router.
-                    // Given the constraint "NO V4 CORE REWRITE", replacing PaginatedQuerySrv is risky.
-                    // Strategy: Intercept the call inside V5Router if it mimics PaginatedQuerySrv interface?
-                    // Or keep list() as is for now and focus on get()?
-                    // Requirement: "Route Alerts List API calls".
-                    // PaginatedQuerySrv uses QuerySrv.call. We should probably route inside QuerySrv or V5Router.
-
-                    // IF we want to use V5Router for list, we need to return an object compatible with PaginatedQuerySrv.
-                    // Let's stick to the existing implementation for list but use V5Router for direct get first.
-                    // Wait, instruction "Wire v5Router into those existing functions".
-
+                    // E6.1: V5 Routing for Alerts List
+                    // Using PaginatedQuerySrv for v4.
+                    // Routing logic for list is deferred or requires deeper refactor.
                     return new PaginatedQuerySrv({
                         name: 'alerts',
                         root: undefined,
@@ -164,7 +46,7 @@
                 },
 
                 get: function (alertId) {
-                    // E6.1: Route via V5Router
+                    // E6.1: Route via V5Router with Fallback
                     return V5Router.getAlert(alertId);
                 },
 

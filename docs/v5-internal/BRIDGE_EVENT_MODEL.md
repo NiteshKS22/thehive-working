@@ -92,3 +92,61 @@ Drift detection is performed in two layers:
 2.  **Nightly Job (Batch):** A script `nightly_drift_check.py` performs a hash-based comparison.
     -   **Canonical Fields:** `case_id`, `title`, `status`, `severity`, `updated_at`.
     -   **Logic:** Fetches batches of v5 cases, retrieves authoritative state from v4 (mocked for initial implementation), computes SHA-256 hashes of the canonical fields, and alerts on mismatch.
+
+## Writeback Events (v5 -> v4) - Phase B1.3
+
+### `bridge.v5.case.writeback.v1`
+Emitted when v5 Case Service processes a change that should be reflected in v4.
+
+**Payload:**
+```json
+{
+  "event_id": "UUID",
+  "type": "V5CaseWritebackRequested",
+  "tenant_id": "String",
+  "meta": {
+    "origin": "v5",
+    "bridge_id": "v5-writeback-publisher-1"
+  },
+  "payload": {
+    "case_id": "String",
+    "mutation_type": "UPDATE",
+    "case_patch": { ... },
+    "updated_at": "Long",
+    "updated_by": "String"
+  }
+}
+```
+
+### Conflict Policy (Writeback)
+- **v4 Authoritative:** If v4 has , the writeback is SKIPPED (CONFLICT).
+- **Loop Prevention:** Events with  are ignored by v5-writeback-publisher. v4-outbox-publisher ignores changes made by v4-inbox-applier.
+
+## Writeback Events (v5 -> v4) - Phase B1.3
+
+### `bridge.v5.case.writeback.v1`
+Emitted when v5 Case Service processes a change that should be reflected in v4.
+
+**Payload:**
+```json
+{
+  "event_id": "UUID",
+  "type": "V5CaseWritebackRequested",
+  "tenant_id": "String",
+  "meta": {
+    "origin": "v5",
+    "bridge_id": "v5-writeback-publisher-1"
+  },
+  "payload": {
+    "case_id": "String",
+    "mutation_type": "UPDATE",
+    "case_patch": { ... },
+    "updated_at": "Long",
+    "updated_by": "String"
+  }
+}
+```
+
+### Conflict Policy (Writeback)
+- **v4 Authoritative:** If v4 has `updated_at > v5.updated_at`, the writeback is SKIPPED (CONFLICT).
+- **Loop Prevention:** Events with `meta.origin='v4'` are ignored by v5-writeback-publisher. v4-outbox-publisher ignores changes made by v4-inbox-applier.

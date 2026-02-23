@@ -357,3 +357,37 @@ Harden the engine for production deployment (GA readiness).
 **Pending:**
 -   v4-Side Outbox Publisher (Requires v4 code access/DB trigger).
 -   Full end-to-end integration tests.
+
+## Phase B1.1 - v4 Outbox Publisher (Active)
+**Status:** In Progress
+**Objective:** Enable v4 to publish authoritative events to v5.
+**Implemented Components:**
+-   `migration/v4_outbox_schema.sql`
+-   `v4-bridge/v4-outbox-publisher` (Service)
+-   `bridge.v4.*` topics
+**Pending:**
+-   Integration with actual v4 codebase (trigger/hook implementation).
+
+## Phase B1.2 - E2E Bridge Proof (Completed)
+**Status:** Validated
+**Objective:** Prove end-to-end flow from v4 Outbox to v5 OpenSearch.
+**Evidence:**
+-   CI Test: `verify_bridge_e2e.py` passes.
+-   Duplicate handling verified via seeding script.
+**Components:**
+-   v4-outbox-publisher
+-   v4-sync-service
+
+## Phase B1.3 - Writeback Adapter (Active)
+**Status:** In Progress
+**Objective:** Enable v5->v4 sync for legacy compatibility.
+**Components:**
+-   `v5-core/v5-writeback-publisher`
+-   `v4-bridge/v4-inbox-applier`
+-   `migration/v4_inbox_schema.sql`
+
+## Phase B1.4 - Real Drift Detection (Active)
+**Status:** In Progress
+**Objective:** Compare real v4 vs v5 state.
+**Components:**
+-   `nightly_drift_check.py` updated for real DB.

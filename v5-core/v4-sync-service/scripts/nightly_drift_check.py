@@ -16,6 +16,7 @@ V4_DB_NAME = os.getenv("V4_DB_NAME", "thehive")
 OPENSEARCH_HOST = os.getenv("OPENSEARCH_HOST", "opensearch")
 OPENSEARCH_PORT = int(os.getenv("OPENSEARCH_PORT", 9200))
 USE_SSL = os.getenv("OPENSEARCH_USE_SSL", "false").lower() == "true"
+ALLOW_STUB_V4 = os.getenv("ALLOW_STUB_V4", "false").lower() == "true"
 
 def get_v4_state(case_id):
     """
@@ -24,19 +25,19 @@ def get_v4_state(case_id):
     try:
         conn = psycopg2.connect(host=V4_DB_HOST, user=V4_DB_USER, password=V4_DB_PASSWORD, database=V4_DB_NAME, port=5432)
         cur = conn.cursor()
-        # Mock table read for B1.4 demo if real v4 table doesn't exist in test env yet
-        # In real life: SELECT ... FROM case WHERE caseId = ...
-        # Here we query the outbox seed data or similar if we seeded v4
-        # For this exercise, we will assume v4_outbox acts as the state source if tables missing
 
-        # Try reading from a hypothetical 'cases' table, fallback to outbox seed data
-        # To make this robust for CI without full v4 schema:
+        # TODO: Implement real SELECT from v4 'case' table.
+        # For Phase B1.4 proof without full v4 schema, we require explicit permission to use stubs.
+        if not ALLOW_STUB_V4:
+            raise Exception("Real v4 DB schema not found and ALLOW_STUB_V4=false. Cannot proceed.")
+
+        # Stub logic for CI proof (B1.2/B1.4)
         return {
             "case_id": case_id,
             "title": f"Incident {case_id}", # Mock matching seeding
             "status": "Open",
             "severity": 3,
-            "updated_at": int(time.time() * 1000) # This will drift if not mocked carefully
+            "updated_at": int(time.time() * 1000)
         }
     except Exception as e:
         logging.error(f"v4 DB Error: {e}")

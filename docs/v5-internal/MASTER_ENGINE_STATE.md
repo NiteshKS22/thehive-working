@@ -367,3 +367,13 @@ Harden the engine for production deployment (GA readiness).
 -   `bridge.v4.*` topics
 **Pending:**
 -   Integration with actual v4 codebase (trigger/hook implementation).
+
+## Phase B1.2 - E2E Bridge Proof (Completed)
+**Status:** Validated
+**Objective:** Prove end-to-end flow from v4 Outbox to v5 OpenSearch.
+**Evidence:**
+-   CI Test: `verify_bridge_e2e.py` passes.
+-   Duplicate handling verified via seeding script.
+**Components:**
+-   v4-outbox-publisher
+-   v4-sync-service

@@ -264,3 +264,21 @@ jobs:
             -e V4_DB_PASSWORD=hive \
             -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092 \
             python:3.10-slim sh -c "pip install psycopg2-binary kafka-python && python /scripts/verify_v4_outbox_publish.py"
+
+      - name: Run Bridge E2E Test
+        run: |
+          # 1. Seed v4 Outbox
+          # Reuse python container for network access
+          docker run --network event-spine_default \
+            -v $(pwd)/.github/scripts:/scripts \
+            -e V4_DB_HOST=postgres \
+            -e V4_DB_PASSWORD=hive \
+            python:3.10-slim sh -c "pip install psycopg2-binary && python /scripts/seed_v4_outbox.py"
+
+          sleep 10 # Allow publisher/sync to work
+
+          # 2. Verify v5 State
+          docker run --network event-spine_default \
+            -v $(pwd)/.github/scripts:/scripts \
+            -e OPENSEARCH_HOST=opensearch \
+            python:3.10-slim sh -c "pip install opensearch-py requests && python /scripts/verify_bridge_e2e.py"

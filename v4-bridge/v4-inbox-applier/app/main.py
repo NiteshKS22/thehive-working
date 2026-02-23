@@ -34,10 +34,12 @@ def main():
             time.sleep(10)
         return
 
+    # B1-BLOCK-01: Disable auto-commit for reliability
     consumer = KafkaConsumer(
         INPUT_TOPIC,
         bootstrap_servers=KAFKA_BOOTSTRAP,
         group_id="v4-inbox-group",
+        enable_auto_commit=False,
         value_deserializer=lambda m: json.loads(m.decode('utf-8'))
     )
 
@@ -46,6 +48,8 @@ def main():
     while running:
         # 1. Consume & Buffer to DB
         msg_pack = consumer.poll(timeout_ms=500)
+        commit_needed = False
+
         for tp, messages in msg_pack.items():
             for msg in messages:
                 try:
@@ -62,10 +66,35 @@ def main():
                     }
                     insert_inbox_row(row)
                     INBOX_ROWS_WRITTEN.labels(status="success").inc()
+                    commit_needed = True
                 except Exception as e:
                     logger.error(f"Insert failed: {e}")
+                    # B1-BLOCK-01: Do NOT commit if insert fails.
+                    # Backoff and retry (loop continues next iteration)
+                    # For strict ordering, we should probably break inner loop and not commit?
+                    # Yes, break to retry this batch or message?
+                    # Poll returns batch. If msg 1 ok, msg 2 fail. We cannot commit msg 2.
+                    # Ideally we break and rely on Kafka to re-deliver uncommitted offsets?
+                    # Or we explicitly do not set commit_needed=True for this batch if any fail?
+                    # BUT if we processed msg 1, we want to commit it?
+                    # Kafka manual commit commits *all* up to offset.
+                    # So if msg 2 fails, we cannot commit msg 2. We could commit msg 1 manually.
+                    # Simplified: If any error in batch, do not commit ANY of the batch.
+                    # Rely on idempotency of insert_inbox_row (ON CONFLICT DO NOTHING) for replays.
+                    commit_needed = False
+                    time.sleep(2) # Backoff
+                    break
 
-        # 2. Claim & Apply
+            if not commit_needed:
+                break # Break outer tp loop too
+
+        if commit_needed:
+            try:
+                consumer.commit()
+            except Exception as e:
+                logger.error(f"Commit failed: {e}")
+
+        # 2. Claim & Apply (Decoupled from Kafka loop, runs against DB state)
         try:
             rows = claim_pending_rows(limit=10)
             for row in rows:

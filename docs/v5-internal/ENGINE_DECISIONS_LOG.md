@@ -225,3 +225,41 @@ We will use the **Transactional Outbox Pattern**.
 ### Compliance
 -   **Tenant Isolation:** `tenant_id` is mandatory in the outbox schema and must be populated by the v4 application from authoritative context.
 -   **Security:** Publisher uses SSL/TLS for Kafka.
+
+## ADR-032: Bidirectional Bridge with Inbox Pattern (Phase B1.3)
+
+### Status
+Accepted
+
+### Context
+To support legacy UI compatibility during migration, changes made in v5 (e.g., via API automation) must be reflected in v4. However, v4 remains authoritative.
+
+### Decision
+1.  **Writeback Publisher:** A v5 service publishes  events for allowed tenants.
+2.  **Inbox Pattern:** A v4-side service () writes these events to a  table.
+3.  **Applier Loop:** The applier processes inbox rows idempotently.
+4.  **Loop Prevention:** Explicit  headers.
+5.  **Conflict Resolution:** v4 wins. If v4 is newer, writeback fails safely.
+
+### Consequences
+-   **Pros:** Keeps v4/v5 consistent. Reversible.
+-   **Cons:** Complexity. Potential for race conditions (mitigated by timestamps).
+
+## ADR-032: Bidirectional Bridge with Inbox Pattern (Phase B1.3)
+
+### Status
+Accepted
+
+### Context
+To support legacy UI compatibility during migration, changes made in v5 (e.g., via API automation) must be reflected in v4. However, v4 remains authoritative.
+
+### Decision
+1.  **Writeback Publisher:** A v5 service publishes `V5CaseWritebackRequested` events for allowed tenants.
+2.  **Inbox Pattern:** A v4-side service (`v4-inbox-applier`) writes these events to a `v4_inbox` table.
+3.  **Applier Loop:** The applier processes inbox rows idempotently.
+4.  **Loop Prevention:** Explicit `meta.origin` headers.
+5.  **Conflict Resolution:** v4 wins. If v4 is newer, writeback fails safely.
+
+### Consequences
+-   **Pros:** Keeps v4/v5 consistent. Reversible.
+-   **Cons:** Complexity. Potential for race conditions (mitigated by timestamps).

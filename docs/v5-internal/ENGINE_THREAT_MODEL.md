@@ -119,3 +119,19 @@ flowchart TD
 1.  **Database Access Controls:** Restrict write access to `v4_outbox` to the v4 app user.
 2.  **Publisher Validation:** Publisher validates `tenant_id` format and consistency where possible.
 3.  **Audit:** All outbox writes are part of the v4 audit trail.
+
+### Threat-037: Writeback Injection
+
+**Risk:** Attacker injects fake writeback events to corrupt v4 DB.
+**Status:** MITIGATED.
+**Mitigation:**
+1.  **Strict Origin Check:**  validates  and origin.
+2.  **Inbox Pattern:** Indirect write via table allows validation before apply.
+
+### Threat-037: Writeback Injection
+
+**Risk:** Attacker injects fake writeback events to corrupt v4 DB.
+**Status:** MITIGATED.
+**Mitigation:**
+1.  **Strict Origin Check:** `v4-inbox-applier` validates `meta.bridge_id` and origin.
+2.  **Inbox Pattern:** Indirect write via table allows validation before apply.

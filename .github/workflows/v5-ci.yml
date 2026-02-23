@@ -282,3 +282,38 @@ jobs:
             -v $(pwd)/.github/scripts:/scripts \
             -e OPENSEARCH_HOST=opensearch \
             python:3.10-slim sh -c "pip install opensearch-py requests && python /scripts/verify_bridge_e2e.py"
+
+      - name: Build Writeback Services
+        run: |
+          cp -r v5-core/common v5-core/v5-writeback-publisher/ || true
+          docker build -t v5-writeback:ci v5-core/v5-writeback-publisher/
+
+          docker build -t v4-applier:ci v4-bridge/v4-inbox-applier/
+
+      - name: Setup v4 Inbox DB
+        run: |
+          cat migration/v4_inbox_schema.sql | docker-compose -f v5-core/event-spine/docker-compose.yml exec -T postgres psql -U hive -d thehive
+
+      - name: Start Writeback Services
+        run: |
+          NETWORK_NAME="event-spine_default"
+
+          docker run -d --name v5-writeback --network $NETWORK_NAME \
+            -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092 \
+            -e V5_WRITEBACK_ENABLED=true \
+            v5-writeback:ci
+
+          docker run -d --name v4-applier --network $NETWORK_NAME \
+            -e KAFKA_BOOTSTRAP_SERVERS=redpanda:29092 \
+            -e V5_WRITEBACK_ENABLED=true \
+            -e V4_DB_HOST=postgres \
+            -e V4_DB_PASSWORD=hive \
+            v4-applier:ci
+
+      - name: Verify Writeback E2E
+        run: |
+          docker run --network event-spine_default \
+            -v $(pwd)/.github/scripts:/scripts \
+            -e V4_DB_HOST=postgres \
+            -e V4_DB_PASSWORD=hive \
+            python:3.10-slim sh -c "pip install psycopg2-binary kafka-python && python /scripts/verify_writeback_e2e.py"

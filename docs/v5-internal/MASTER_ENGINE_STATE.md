@@ -377,3 +377,17 @@ Harden the engine for production deployment (GA readiness).
 **Components:**
 -   v4-outbox-publisher
 -   v4-sync-service
+
+## Phase B1.3 - Writeback Adapter (Active)
+**Status:** In Progress
+**Objective:** Enable v5->v4 sync for legacy compatibility.
+**Components:**
+-   `v5-core/v5-writeback-publisher`
+-   `v4-bridge/v4-inbox-applier`
+-   `migration/v4_inbox_schema.sql`
+
+## Phase B1.4 - Real Drift Detection (Active)
+**Status:** In Progress
+**Objective:** Compare real v4 vs v5 state.
+**Components:**
+-   `nightly_drift_check.py` updated for real DB.

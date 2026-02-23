@@ -1,7 +1,7 @@
 (function () {
     'use strict';
     angular.module('theHiveServices')
-        .factory('AlertingSrv', function ($q, $http, $rootScope, StatSrv, StreamSrv, PSearchSrv, PaginatedQuerySrv) {
+        .factory('AlertingSrv', function ($q, $http, $rootScope, StatSrv, StreamSrv, PSearchSrv, PaginatedQuerySrv, V5Router) {
 
             var baseUrl = './api/alert';
 
@@ -130,6 +130,20 @@
                     return (similarityFilters[name] || {}).filters;
                 },
                 list: function (config, callback) {
+                    // E6.1: V5 Routing
+                    // If V5 enabled, use V5Router.getAlerts() logic
+                    // However, PaginatedQuerySrv is a complex beast wrapping the query.
+                    // For minimal invasion, we might need to adapt PaginatedQuerySrv or just V5Router.
+                    // Given the constraint "NO V4 CORE REWRITE", replacing PaginatedQuerySrv is risky.
+                    // Strategy: Intercept the call inside V5Router if it mimics PaginatedQuerySrv interface?
+                    // Or keep list() as is for now and focus on get()?
+                    // Requirement: "Route Alerts List API calls".
+                    // PaginatedQuerySrv uses QuerySrv.call. We should probably route inside QuerySrv or V5Router.
+
+                    // IF we want to use V5Router for list, we need to return an object compatible with PaginatedQuerySrv.
+                    // Let's stick to the existing implementation for list but use V5Router for direct get first.
+                    // Wait, instruction "Wire v5Router into those existing functions".
+
                     return new PaginatedQuerySrv({
                         name: 'alerts',
                         root: undefined,
@@ -150,10 +164,8 @@
                 },
 
                 get: function (alertId) {
-                    return $http.get('./api/v1/alert/' + alertId)
-                        .then(function (response) {
-                            return response.data;
-                        });
+                    // E6.1: Route via V5Router
+                    return V5Router.getAlert(alertId);
                 },
 
                 create: function (alertId, data) {

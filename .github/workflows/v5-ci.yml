@@ -317,3 +317,14 @@ jobs:
             -e V4_DB_HOST=postgres \
             -e V4_DB_PASSWORD=hive \
             python:3.10-slim sh -c "pip install psycopg2-binary kafka-python && python /scripts/verify_writeback_e2e.py"
+
+      - name: Verify UI Routing Targets
+        run: |
+          # Use existing token from previous steps
+          TOKEN_A=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyQSIsInRlbmFudF9pZCI6InRlbmFudC1BIiwicm9sZXMiOlsiU09DX0FOQUxZU1QiXSwiZXhwIjoxNzcxNDExODE4LCJpc3MiOiJodHRwczovL2F1dGguZXhhbXBsZS5jb20ifQ.AtDsCRT0TLpcG52z1McLauM_ha1u6Cy-Qdp7zJcnbgs
+
+          docker run --network event-spine_default \
+            -v $(pwd)/.github/scripts:/scripts \
+            -e QUERY_API_URL=http://query-service:8001 \
+            -e AUTH_TOKEN=$TOKEN_A \
+            python:3.10-slim sh -c "pip install requests && python /scripts/verify_ui_routing.py"

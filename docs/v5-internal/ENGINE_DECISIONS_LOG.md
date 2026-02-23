@@ -263,3 +263,21 @@ To support legacy UI compatibility during migration, changes made in v5 (e.g., v
 ### Consequences
 -   **Pros:** Keeps v4/v5 consistent. Reversible.
 -   **Cons:** Complexity. Potential for race conditions (mitigated by timestamps).
+
+## ADR-033: UI Strangler Pattern (Phase E6.1)
+
+### Status
+Accepted
+
+### Context
+We need to migrate the UI to use the v5 Engine without rewriting the entire frontend application immediately.
+
+### Decision
+1.  **Feature Flags:** UI routing is controlled by global window variables (injected via config).
+2.  **Adapter Pattern:** A `V5Router` service mediates calls.
+3.  **Fail-Open:** If v5 reads fail (non-auth error), the UI falls back to v4 endpoints automatically.
+4.  **Read-Only:** Only safe GET requests are routed in Phase E6.1.
+
+### Consequences
+-   **Pros:** incremental migration, risk mitigation via fallback.
+-   **Cons:** Dual maintenance of API contracts in frontend logic.

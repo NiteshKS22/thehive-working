@@ -30,10 +30,10 @@ class MispExportSrv @Inject() (
 
   lazy val logger: Logger = Logger(getClass)
 
-  def observableToAttribute(observable: RichObservable, exportTags: Boolean): Option[Attribute] = {
+  def observableToAttribute(observable: RichObservable, exportTags: Boolean)(implicit graph: Graph): Option[Attribute] = {
     lazy val mispTags =
       if (exportTags)
-        observable.tags.map(t => MispTag(None, t, None, None)) ++ tlpTags.get(observable.tlp) // FIXME Add colour
+        graph.V(observable._id).to[Observable].tags.toList.map(t => MispTag(None, t.toString, Some(t.colour), None)) ++ tlpTags.get(observable.tlp)
       else
         tlpTags.get(observable.tlp).toSeq
 

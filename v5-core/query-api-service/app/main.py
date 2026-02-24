@@ -369,6 +369,8 @@ def simulate_rules(
 
 # E3: Case Domain Read Endpoints (Proxied to Query API for unified read surface)
 # Implementation: Direct Postgres Read
+# FRAGILE: The /cases endpoint relies on direct Postgres reads while /alerts uses OpenSearch.
+# This is fine for E3, but as traffic grows, we need the "Bridge" to ensure they don't drift.
 @app.get("/cases")
 def list_cases(
     status: Optional[str] = Query(None, regex="^(OPEN|CLOSED)$"),

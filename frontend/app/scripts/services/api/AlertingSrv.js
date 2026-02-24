@@ -1,7 +1,7 @@
 (function () {
     'use strict';
     angular.module('theHiveServices')
-        .factory('AlertingSrv', function ($q, $http, $rootScope, StatSrv, StreamSrv, PSearchSrv, PaginatedQuerySrv, V5Router, V5Config) {
+        .factory('AlertingSrv', function ($q, $http, $rootScope, StatSrv, StreamSrv, PSearchSrv, PaginatedQuerySrv, NvRouter, NvConfig) {
 
             var baseUrl = './api/alert';
 
@@ -33,7 +33,7 @@
                         filter: config.filter
                     };
 
-                    V5Router.getAlerts(params).then(function(data) {
+                    NvRouter.getAlerts(params).then(function(data) {
                         self.values = data; // Assuming data is array
                         self.total = data.length; // Simplification if v5 doesn't return total in list
                         // In real v5, response might be { results: [], total: N }
@@ -45,9 +45,9 @@
                             callback(self.values);
                         }
                     }).catch(function(err) {
-                        // Fallback logic inside V5Router handles the switch,
+                        // Fallback logic inside NvRouter handles the switch,
                         // but if we are here, it means even fallback failed or 403.
-                        // If fallback was triggered inside V5Router, it would return v4 data.
+                        // If fallback was triggered inside NvRouter, it would return v4 data.
                         // So we just handle error here.
                         console.error("V5 List Error", err);
                     }).finally(function() {
@@ -68,7 +68,7 @@
                 },
                 list: function (config, callback) {
                     // E6.1: V5 Routing for Alerts List
-                    if (V5Config.useV5QueryReads) {
+                    if (NvConfig.useNvQueryReads) {
                         // We must return an object compatible with the controller's expectations of PaginatedQuerySrv
                         // But controllers expect specific methods.
                         // For Phase E6.1, we use the Adapter.
@@ -95,8 +95,8 @@
                 },
 
                 get: function (alertId) {
-                    // E6.1: Route via V5Router with Fallback
-                    return V5Router.getAlert(alertId);
+                    // E6.1: Route via NvRouter with Fallback
+                    return NvRouter.getAlert(alertId);
                 },
 
                 create: function (alertId, data) {

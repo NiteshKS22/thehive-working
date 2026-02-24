@@ -3,10 +3,10 @@
 ## Critical Bugs Fixed
 
 ### 1. Missing Partition Key in Correlation Producer
-- **Issue**: `correlation-service` was sending events to `correlation.group.*` topics without a `key`.
+- **Issue**: `nv-correlation` was sending events to `correlation.group.*` topics without a `key`.
 - **Impact**: Events for the same group could land on different partitions. If a consumer (Group Indexer) reads partitions at different speeds, `GroupUpdated` could be processed before `GroupCreated`.
 - **Result**: Partial documents created in OpenSearch (upsert=True), missing static fields like `rule_id`.
-- **Fix**: Added `key=group_id.encode('utf-8')` to all `producer.send` calls in `correlation-service`.
+- **Fix**: Added `key=group_id.encode('utf-8')` to all `producer.send` calls in `nv-correlation`.
 
 ## Logical Errors Fixed
 
@@ -22,5 +22,5 @@
 - **Note**: Simulating historical alerts might produce different group IDs than if processed in real-time. This is a known limitation of the "Dry Run" feature.
 
 ### 2. Schema Duplication
-- **Observation**: Rule logic is duplicated between `correlation-service` and `query-api-service` (simulation).
+- **Observation**: Rule logic is duplicated between `nv-correlation` and `nv-query` (simulation).
 - **Note**: Accepted for Phase 3D to keep services decoupled without a shared library artifact pipeline. Logic is verified consistent.

@@ -3,11 +3,11 @@
 **Status**: Baseline (Phase 0 - E1)
 **Last Updated**: 2026-02-11
 
-This document tracks significant architectural decisions for the v5-Internal engine.
+This document tracks significant architectural decisions for the NeuralVyuha engine.
 
 ## ADR-001: Strangler Fig Pattern for Modernization
 - **Context**: The legacy TheHive 4 monolith is difficult to maintain and scale.
-- **Decision**: Build v5-Internal as a parallel "Headless Engine" handling high-volume ingestion and search, while treating v4-LTS as immutable for UI/Case Management.
+- **Decision**: Build NeuralVyuha as a parallel "Headless Engine" handling high-volume ingestion and search, while treating v4-LTS as immutable for UI/Case Management.
 - **Consequences**: Requires careful synchronization logic later. Traffic flows one-way (Ingest -> v5) initially.
 - **Status**: Active (Phase 0).
 
@@ -33,7 +33,7 @@ This document tracks significant architectural decisions for the v5-Internal eng
 - **Context**: Data loss is unacceptable. Auto-commit can lose messages if processing fails after commit.
 - **Decision**: Disable `enable_auto_commit`. Consumers manually commit offsets ONLY after successful DB write + Producer flush OR successful DLQ publish.
 - **Consequences**: Potential duplicates during replays (consumers must be idempotent). Guarantees at-least-once.
-- **Evidence**: `v5-core/correlation-service/app/main.py`.
+- **Evidence**: `neural-vyuha-engine/nv-correlation/app/main.py`.
 - **Status**: Active (Phase 3B/3D).
 
 ## ADR-006: Tenant ID in Top-Level Event Envelope
@@ -110,7 +110,7 @@ This document tracks significant architectural decisions for the v5-Internal eng
 
 ## ADR-018: CI Network Isolation
 - **Context**: `--network host` in CI is fragile and doesn't mirror prod.
-- **Decision**: Use `docker-compose` created network (`event-spine_default`). Services communicate via internal DNS.
+- **Decision**: Use `docker-compose` created network (`nv-mesh`). Services communicate via internal DNS.
 - **Status**: Active (Phase 3D Audit).
 
 ## ADR-019: Additive Correlation
@@ -137,7 +137,7 @@ This document tracks significant architectural decisions for the v5-Internal eng
 
 ## ADR-023: CQRS-Lite for Case APIs
 - **Context**: We need to separate Write logic (Case Service) from Read logic (Query Service) to maintain architecture symmetry.
-- **Decision**: `case-service` handles Writes. `query-api-service` handles Reads (proxying to Postgres for E3).
+- **Decision**: `nv-case-engine` handles Writes. `nv-query` handles Reads (proxying to Postgres for E3).
 - **Rationale**: Keeps  focused on business rules/side-effects.  remains the single pane of glass.
 - **Status**: Active (Phase E3).
 
@@ -185,7 +185,7 @@ This document tracks significant architectural decisions for the v5-Internal eng
 Accepted
 
 ### Context
-To migrate from v4-LTS (Monolith) to v5-Internal (Microservices) without a "Big Bang" rewrite, we need a mechanism to synchronize state bi-directionally. v4 must remain the system of record for the UI during the transition.
+To migrate from v4-LTS (Monolith) to NeuralVyuha (Microservices) without a "Big Bang" rewrite, we need a mechanism to synchronize state bi-directionally. v4 must remain the system of record for the UI during the transition.
 
 ### Decision
 We will implement a **Strangler Fig Pattern** with an **Event Outbox** on the v4 side and a **Sync Adapter** on the v5 side.
@@ -274,7 +274,7 @@ We need to migrate the UI to use the v5 Engine without rewriting the entire fron
 
 ### Decision
 1.  **Feature Flags:** UI routing is controlled by global window variables (injected via config).
-2.  **Adapter Pattern:** A `V5Router` service mediates calls.
+2.  **Adapter Pattern:** A `NvRouter` service mediates calls.
 3.  **Fail-Open:** If v5 reads fail (non-auth error), the UI falls back to v4 endpoints automatically.
 4.  **Read-Only:** Only safe GET requests are routed in Phase E6.1.
 

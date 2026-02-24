@@ -2,12 +2,12 @@
 
 ## Issue A: AlertAccepted schema mismatch
 - **Status**: NOT A BUG
-- **Evidence**: `dedup-service` puts `tenant_id` at top level and `original_payload` inside payload. `correlation-service` reads `tenant_id` from event top level and `original_payload` from payload. This matches.
+- **Evidence**: `dedup-service` puts `tenant_id` at top level and `original_payload` inside payload. `nv-correlation` reads `tenant_id` from event top level and `original_payload` from payload. This matches.
 - **Action**: None.
 
 ## Issue B: DLQ not actually used
 - **Status**: BUG
-- **Evidence**: `correlation-service` defined DLQ topic but logged errors instead of publishing.
+- **Evidence**: `nv-correlation` defined DLQ topic but logged errors instead of publishing.
 - **Action**: Implemented `producer.send(DLQ_TOPIC, ...)` for missing required fields or processing errors.
 - **Test**: Code inspection.
 
@@ -20,7 +20,7 @@
 ## Issue D: v5 CI uses `--network host`
 - **Status**: BUG
 - **Evidence**: CI used host networking, hiding potential internal connectivity issues.
-- **Action**: Switched CI to use `event-spine_default` network created by `docker-compose`. Services now communicate via internal DNS (redpanda, redis, postgres).
+- **Action**: Switched CI to use `nv-mesh` network created by `docker-compose`. Services now communicate via internal DNS (redpanda, redis, postgres).
 - **Test**: CI execution.
 
 ## Issue E: Smoke test JSON parsing is brittle

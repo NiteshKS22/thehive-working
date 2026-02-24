@@ -1,6 +1,6 @@
 'use strict';
 
-angular.module('thehive').factory('V5Router', function($http, $q, V5Config, NotificationSrv) {
+angular.module('theHiveServices').factory('V5Router', function($http, $q, V5Config, NotificationSrv) {
 
   var service = {};
 
@@ -25,7 +25,6 @@ angular.module('thehive').factory('V5Router', function($http, $q, V5Config, Noti
       // Other Errors (5xx, Timeout, Network) -> Fallback
       if (V5Config.fallbackToV4) {
         console.warn('v5 Query API failed/timed out. Falling back to v4.', err);
-        // Optional: Show banner "Showing legacy data"
         return v4FallbackFn();
       }
 
@@ -39,11 +38,17 @@ angular.module('thehive').factory('V5Router', function($http, $q, V5Config, Noti
     var v5Request = $http.get(V5Config.v5BaseUrl + '/alerts', {
       params: params,
       timeout: V5Config.timeoutMs
+    }).then(function(res) {
+        return res.data; // Adapter expects data
     });
 
     // Fallback: Legacy v4 endpoint
+    // Note: Legacy list() returns PaginatedQuerySrv object, but here we just return the data promise
+    // The V5ListAdapter handles the structure.
+    // Ideally, fallback should return promise resolving to v4 data.
     var v4Request = function() {
-      return $http.get('/api/alert', { params: params });
+      // Direct call to v4 API mimicking PaginatedQuerySrv internal call
+      return $http.post('/api/v1/query', { query: { _name: 'listAlert' }, filter: params.filter, sort: params.sort }).then(function(res) { return res.data; });
     };
 
     return tryV5OrElse(v5Request, v4Request);
@@ -53,10 +58,12 @@ angular.module('thehive').factory('V5Router', function($http, $q, V5Config, Noti
   service.getAlert = function(id) {
     var v5Request = $http.get(V5Config.v5BaseUrl + '/alerts/' + id, {
       timeout: V5Config.timeoutMs
+    }).then(function(res) {
+        return res.data;
     });
 
     var v4Request = function() {
-      return $http.get('/api/alert/' + id);
+      return $http.get('./api/v1/alert/' + id).then(function(res) { return res.data; });
     };
 
     return tryV5OrElse(v5Request, v4Request);

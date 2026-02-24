@@ -10,6 +10,7 @@ import itertools
 from fastapi import FastAPI, HTTPException, Response, status, Depends, Body, Query
 from opensearchpy import OpenSearch
 from typing import Dict, Any, Optional, List
+from functools import lru_cache
 
 # Mount Common Auth
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../common')))
@@ -270,9 +271,8 @@ def get_group_alerts(group_id: str, auth: AuthContext = Depends(require_permissi
 
     return {"total": len(results), "hits": results}
 
-@app.get("/rules")
-def list_rules(auth: AuthContext = Depends(require_permission(PERM_RULE_SIMULATE))):
-    # Assuming rules are global read, but authenticated
+@lru_cache(maxsize=1)
+def _get_rules_from_db(ttl_hash=None):
     conn = get_db_conn()
     try:
         with conn.cursor() as cur:
@@ -289,32 +289,23 @@ def list_rules(auth: AuthContext = Depends(require_permission(PERM_RULE_SIMULATE
                     "template": r[5],
                     "required_fields": r[6]
                 })
-            return {"total": len(rules), "rules": rules}
+            return rules
     finally:
         conn.close()
+
+@app.get("/rules")
+def list_rules(auth: AuthContext = Depends(require_permission(PERM_RULE_SIMULATE))):
+    # 5 minute cache
+    rules = _get_rules_from_db(time.time() // 300)
+    return {"total": len(rules), "rules": rules}
 
 @app.post("/rules/simulate")
 def simulate_rules(
     alert_payload: Dict[str, Any] = Body(...),
     auth: AuthContext = Depends(require_permission(PERM_RULE_SIMULATE)) # Require Auth, implicit Tenant
 ):
-    conn = get_db_conn()
-    rules = []
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT rule_id, rule_name, enabled, confidence, window_minutes, correlation_key_template, required_fields FROM correlation_rules WHERE enabled = TRUE")
-            rows = cur.fetchall()
-            for r in rows:
-                rules.append({
-                    "rule_id": r[0],
-                    "rule_name": r[1],
-                    "confidence": r[3],
-                    "window_minutes": r[4],
-                    "template": r[5],
-                    "required_fields": r[6]
-                })
-    finally:
-        conn.close()
+    all_rules = _get_rules_from_db(time.time() // 300)
+    rules = [r for r in all_rules if r['enabled']]
 
     timestamp = int(time.time() * 1000)
     matches = []

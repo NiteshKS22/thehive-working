@@ -2,6 +2,8 @@
 
 This document details the architectural workflow of TheHive v5, including its ingestion pipeline, the synchronization bridge with the legacy v4 system, and the writeback mechanism.
 
+> **Feature Comparison**: For a detailed mapping of features, data models, and API endpoints between v4 and v5, please refer to [V4_V5_FEATURE_MAPPING.md](./V4_V5_FEATURE_MAPPING.md).
+
 ## High-Level Architecture (Mermaid)
 
 ```mermaid

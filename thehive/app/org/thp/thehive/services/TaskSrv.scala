@@ -20,7 +20,7 @@ import play.api.libs.json.{JsNull, JsObject, Json}
 import java.lang.{Boolean => JBoolean}
 import java.util.{Date, Map => JMap}
 import javax.inject.{Inject, Provider, Singleton}
-import scala.util.{Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 @Singleton
 class TaskSrv @Inject() (
@@ -87,7 +87,49 @@ class TaskSrv @Inject() (
         } yield ()
     }
 
+
   /**
+    * Tries to update the status of a sequence of tasks with related fields
+    * according the status value if empty.
+    * @param tasks the tasks to update
+    * @param status the status to set
+    * @param graph db
+    * @param authContext auth db
+    * @return
+    */
+  def bulkUpdateStatus(tasks: Seq[Task with Entity], status: TaskStatus.Value)(implicit
+      graph: Graph,
+      authContext: AuthContext
+  ): Try[Unit] = {
+    if (tasks.isEmpty) return Success(())
+
+    val taskIds = tasks.map(_._id)
+    def setStatus(): Traversal.V[Task] =
+      startTraversal
+        .getByIds(taskIds: _*)
+        .update(_.status, status)
+        .update(_._updatedAt, Some(new Date))
+        .update(_._updatedBy, Some(authContext.userId))
+
+    status match {
+      case TaskStatus.Cancel | TaskStatus.Waiting =>
+        setStatus().iterate()
+        Success(())
+
+      case TaskStatus.Completed =>
+        setStatus().iterate()
+        startTraversal
+          .getByIds(taskIds: _*)
+          .hasNot(_.endDate)
+          .update(_.endDate, Some(new Date()))
+          .iterate()
+        Success(())
+
+      case _ => Failure(new Exception(s"Bulk update not supported for TaskStatus $status"))
+    }
+  }
+
+/**
     * Tries to update the status of a task with related fields
     * according the status value if empty
     * @param task the task to update

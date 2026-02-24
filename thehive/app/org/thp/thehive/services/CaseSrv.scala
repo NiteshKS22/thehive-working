@@ -126,7 +126,7 @@ class CaseSrv @Inject() (
     val uniqueFields = caseTemplateCf.filter {
       case InputCustomFieldValue(name, _, _) => !caseCf.exists(_.name == name)
     }
-    
+
     (caseCf.sortBy(_.order) ++ uniqueFields.sortBy(_.order))
       .zipWithIndex
       .map { case (InputCustomFieldValue(name, value, _), i) => InputCustomFieldValue(name, value, Some(i)) }
@@ -151,14 +151,17 @@ class CaseSrv @Inject() (
       propertyUpdaters: Seq[PropertyUpdater]
   )(implicit graph: Graph, authContext: AuthContext): Try[(Traversal.V[Case], JsObject)] = {
     val closeCase = PropertyUpdater(FPathElem("closeCase"), "") { (vertex, _, _) =>
-      get(vertex)
+      val tasks = get(vertex)
         .tasks
         .or(_.has(_.status, TaskStatus.Waiting), _.has(_.status, TaskStatus.InProgress))
-        .toIterator
-        .toTry {
-          case task if task.status == TaskStatus.InProgress => taskSrv.updateStatus(task, TaskStatus.Completed)
-          case task                                         => taskSrv.updateStatus(task, TaskStatus.Cancel)
-        }
+        .toSeq
+
+      val (toComplete, toCancel) = tasks.partition(_.status == TaskStatus.InProgress)
+
+      (for {
+        _ <- taskSrv.bulkUpdateStatus(toComplete, TaskStatus.Completed)
+        _ <- taskSrv.bulkUpdateStatus(toCancel, TaskStatus.Cancel)
+      } yield ())
         .flatMap { _ =>
           vertex.property("endDate", System.currentTimeMillis())
           Success(Json.obj("endDate" -> System.currentTimeMillis()))

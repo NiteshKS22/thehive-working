@@ -63,6 +63,11 @@ os_client = OpenSearch(
     use_ssl=False
 )
 
+# Rule Cache Configuration
+RULES_CACHE_TTL = 300 # 5 minutes
+_rules_cache: Optional[List[Dict[str, Any]]] = None
+_rules_cache_ts: float = 0
+
 def get_db_conn():
     try:
         conn = psycopg2.connect(
@@ -73,7 +78,39 @@ def get_db_conn():
         print(f"DB Connection failed: {e}")
         raise HTTPException(status_code=500, detail="Database connection failed")
 
+def get_rules_from_db():
+    conn = get_db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT rule_id, rule_name, enabled, confidence, window_minutes, correlation_key_template, required_fields FROM correlation_rules ORDER BY rule_id")
+            rows = cur.fetchall()
+            rules = []
+            for r in rows:
+                rules.append({
+                    "rule_id": r[0],
+                    "rule_name": r[1],
+                    "enabled": r[2],
+                    "confidence": r[3],
+                    "window_minutes": r[4],
+                    "template": r[5],
+                    "required_fields": r[6]
+                })
+            return rules
+    finally:
+        conn.close()
+
 @app.get("/healthz")
+
+def get_cached_rules():
+    global _rules_cache, _rules_cache_ts
+    now = time.time()
+    if _rules_cache is not None and (now - _rules_cache_ts < RULES_CACHE_TTL):
+        return _rules_cache
+
+    _rules_cache = get_rules_from_db()
+    _rules_cache_ts = now
+    return _rules_cache
+
 def healthz():
     return {"status": "ok"}
 
@@ -273,49 +310,16 @@ def get_group_alerts(group_id: str, auth: AuthContext = Depends(require_permissi
 @app.get("/rules")
 def list_rules(auth: AuthContext = Depends(require_permission(PERM_RULE_SIMULATE))):
     # Assuming rules are global read, but authenticated
-    conn = get_db_conn()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT rule_id, rule_name, enabled, confidence, window_minutes, correlation_key_template, required_fields FROM correlation_rules ORDER BY rule_id")
-            rows = cur.fetchall()
-            rules = []
-            for r in rows:
-                rules.append({
-                    "rule_id": r[0],
-                    "rule_name": r[1],
-                    "enabled": r[2],
-                    "confidence": r[3],
-                    "window_minutes": r[4],
-                    "template": r[5],
-                    "required_fields": r[6]
-                })
-            return {"total": len(rules), "rules": rules}
-    finally:
-        conn.close()
+    rules = get_cached_rules()
+    return {"total": len(rules), "rules": rules}
 
 @app.post("/rules/simulate")
 def simulate_rules(
     alert_payload: Dict[str, Any] = Body(...),
     auth: AuthContext = Depends(require_permission(PERM_RULE_SIMULATE)) # Require Auth, implicit Tenant
 ):
-    conn = get_db_conn()
-    rules = []
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT rule_id, rule_name, enabled, confidence, window_minutes, correlation_key_template, required_fields FROM correlation_rules WHERE enabled = TRUE")
-            rows = cur.fetchall()
-            for r in rows:
-                rules.append({
-                    "rule_id": r[0],
-                    "rule_name": r[1],
-                    "confidence": r[3],
-                    "window_minutes": r[4],
-                    "template": r[5],
-                    "required_fields": r[6]
-                })
-    finally:
-        conn.close()
-
+    all_rules = get_cached_rules()
+    rules = [r for r in all_rules if r['enabled']]
     timestamp = int(time.time() * 1000)
     matches = []
 

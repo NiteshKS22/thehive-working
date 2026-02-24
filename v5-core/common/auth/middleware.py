@@ -15,10 +15,16 @@ def validate_auth_config():
     validate_oidc_config()
 
 def get_config():
+    dev_mode = os.getenv("DEV_MODE", "false").lower() == "true"
+
+    # In PROD, we must not have a default. In DEV, we can fallback to the weak secret.
+    default_secret = "dev-secret-do-not-use-in-prod" if dev_mode else None
+    is_required = not dev_mode
+
     return {
-        "DEV_MODE": os.getenv("DEV_MODE", "false").lower() == "true",
+        "DEV_MODE": dev_mode,
         "ALLOW_DEV_OVERRIDES": os.getenv("ALLOW_DEV_OVERRIDES", "false").lower() == "true",
-        "JWT_SECRET": get_secret("JWT_SECRET", default="dev-secret-do-not-use-in-prod", required=False),
+        "JWT_SECRET": get_secret("JWT_SECRET", default=default_secret, required=is_required),
         "JWT_ALGORITHM": os.getenv("JWT_ALGORITHM", "HS256"),
         "OIDC_ISSUER": os.getenv("OIDC_ISSUER", "https://auth.example.com"),
         "OIDC_AUDIENCE": os.getenv("OIDC_AUDIENCE", "v5-core"),

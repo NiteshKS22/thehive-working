@@ -135,3 +135,11 @@ flowchart TD
 **Mitigation:**
 1.  **Strict Origin Check:** `v4-inbox-applier` validates `meta.bridge_id` and origin.
 2.  **Inbox Pattern:** Indirect write via table allows validation before apply.
+
+### Threat-038: Token Leakage via UI Forwarding
+
+**Risk:** UI forwarding v4 JWT to v5 might leak tokens if not handled over secure channels.
+**Status:** MITIGATED.
+**Mitigation:**
+1.  **Same Origin/Proxy:** v5 API is exposed via same reverse proxy or internal routing.
+2.  **HTTPS:** Frontend only communicates over HTTPS.

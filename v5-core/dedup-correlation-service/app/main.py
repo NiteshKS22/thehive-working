@@ -10,6 +10,8 @@ import threading
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import KafkaError
 import redis
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 # Mount Common Reliability
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../common')))
@@ -17,6 +19,7 @@ from reliability.dlq import build_dlq_event, send_dlq
 from reliability.commit import commit_if_safe
 from reliability.retry import execute_with_retry
 from reliability.backpressure import check_backpressure
+from config.secrets import get_secret
 
 # Metrics
 from metrics_server import start_metrics_server, MESSAGES_PROCESSED, DLQ_PUBLISHED, RETRIES_TOTAL, BACKPRESSURE_EVENTS, CONSUMER_LAG
@@ -34,6 +37,12 @@ AUTO_OFFSET_RESET = os.getenv("AUTO_OFFSET_RESET", "latest")
 MAX_POLL_RECORDS = 100
 METRICS_PORT = int(os.getenv("METRICS_PORT", 9001))
 
+# DB Config (ADR-034)
+POSTGRES_HOST = get_secret("POSTGRES_HOST", "postgres")
+POSTGRES_USER = get_secret("POSTGRES_USER", "hive")
+POSTGRES_PASSWORD = get_secret("POSTGRES_PASSWORD", "hive")
+POSTGRES_DB = get_secret("POSTGRES_DB", "thehive")
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 logger = logging.getLogger("dedup-worker")
 
@@ -47,9 +56,39 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
+def get_db_conn():
+    return psycopg2.connect(
+        host=POSTGRES_HOST,
+        database=POSTGRES_DB,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD
+    )
+
 def generate_fingerprint(payload, tenant_id):
     raw = f"{tenant_id}:{payload.get('source')}:{payload.get('type')}:{payload.get('sourceRef')}"
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+
+def check_postgres_duplicate(tenant_id, fingerprint, original_event_id):
+    """
+    Returns True if duplicate (exists), False if new (insert success).
+    Uses INSERT ... ON CONFLICT DO NOTHING.
+    """
+    conn = get_db_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO alert_fingerprints (tenant_id, fingerprint, original_event_id, first_seen_at)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (tenant_id, fingerprint) DO NOTHING
+            """, (tenant_id, fingerprint, original_event_id, int(time.time() * 1000)))
+            inserted = cur.rowcount > 0
+        conn.commit()
+        return not inserted
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
 
 def process_event(message, r, producer):
     event = message.value
@@ -62,15 +101,33 @@ def process_event(message, r, producer):
         raise ValueError("Missing tenant_id")
 
     fingerprint = generate_fingerprint(payload, tenant_id)
-    redis_key = f"dedup:{tenant_id}:{fingerprint}"
 
+    # 1. Fast Path: Redis Check
+    redis_key = f"dedup:{tenant_id}:{fingerprint}"
     def redis_op():
         return r.set(redis_key, event_id, ex=DEDUP_WINDOW_SECONDS, nx=True)
     
-    is_new = execute_with_retry(redis_op, max_retries=3, retryable_exceptions=(redis.ConnectionError, redis.TimeoutError))
+    is_new_redis = execute_with_retry(redis_op, max_retries=3, retryable_exceptions=(redis.ConnectionError, redis.TimeoutError))
     RETRIES_TOTAL.labels(service="dedup", operation="redis_set").inc()
     
-    is_duplicate = not is_new
+    is_duplicate = False
+
+    if not is_new_redis:
+        # Redis says duplicate
+        is_duplicate = True
+    else:
+        # 2. Slow Path: Postgres Check (ADR-034)
+        # If Redis says new, we MUST check Postgres to catch long-tail duplicates
+        # that expired from Redis.
+        try:
+            is_duplicate_db = execute_with_retry(lambda: check_postgres_duplicate(tenant_id, fingerprint, event_id), max_retries=3, retryable_exceptions=(psycopg2.OperationalError,))
+            RETRIES_TOTAL.labels(service="dedup", operation="postgres_check").inc()
+            if is_duplicate_db:
+                is_duplicate = True
+                # Optional: Refill Redis? No, keep simple.
+        except Exception as e:
+            logger.error(f"Postgres check failed: {e}")
+            raise e # Fail closed
 
     output_event = {
         "event_id": str(uuid.uuid4()),
@@ -101,7 +158,7 @@ def process_event(message, r, producer):
     MESSAGES_PROCESSED.labels(service="dedup", topic=INPUT_TOPIC, status="success").inc()
 
 def main():
-    logger.info("Starting Dedup Worker (Phase 4.3)")
+    logger.info("Starting Dedup Worker (Phase 4.4 Anti-Fragility)")
     start_metrics_server(METRICS_PORT)
 
     try:
@@ -135,7 +192,7 @@ def main():
             msg_pack = consumer.poll(timeout_ms=1000)
             total_processed = 0
             for tp, messages in msg_pack.items():
-                lag = 0 # Need highwater mark to calc real lag, simplified here
+                lag = 0
                 CONSUMER_LAG.labels(service="dedup", topic=tp.topic, partition=tp.partition).set(lag) 
                 
                 for message in messages:
@@ -143,7 +200,7 @@ def main():
                     dlq_success = False
                     
                     try:
-                        execute_with_retry(lambda: process_event(message, r, producer), max_retries=3, retryable_exceptions=(redis.RedisError, KafkaError))
+                        execute_with_retry(lambda: process_event(message, r, producer), max_retries=3, retryable_exceptions=(redis.RedisError, KafkaError, psycopg2.OperationalError))
                         producer.flush()
                         processing_success = True
                     except Exception as e:

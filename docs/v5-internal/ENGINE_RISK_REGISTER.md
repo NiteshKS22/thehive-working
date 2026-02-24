@@ -69,3 +69,29 @@
 **Mitigation:**
 1.  **Timestamps:** Writeback only applies if `v5.updated_at > v4.updated_at`.
 2.  **Audit:** All conflicts logged.
+
+### Risk-023: Split-Brain UI Reads
+
+**Description:** If v5 is behind v4 (sync lag), UI might show stale data when flag is on.
+**Impact:** Medium. User confusion.
+**Mitigation:**
+1.  **Fail-Open:** Users can disable v5 flag if lag is noticed.
+2.  **Versioning:** UI displays "v5 (Beta)" indicator when routed.
+
+### Risk-024: RBAC Mismatch
+
+**Description:** v5 permissions might differ from v4.
+**Impact:** High. Authorization bypass or denial.
+**Mitigation:**
+1.  **Fail-Closed:** 403 errors do NOT fallback to v4.
+2.  **Audit:** Access logs compare v4 vs v5 decisions (shadow mode).
+
+### Risk-017 (Closed): State Divergence
+
+**Status:** Closed.
+**Resolution:** Replaced timestamp-based resolution with Version Vectors (ADR-033).
+
+### Risk-026 (Closed): Duplicate Ingestion
+
+**Status:** Closed.
+**Resolution:** Implemented long-term Postgres deduplication (ADR-034).

@@ -391,3 +391,10 @@ Harden the engine for production deployment (GA readiness).
 **Objective:** Compare real v4 vs v5 state.
 **Components:**
 -   `nightly_drift_check.py` updated for real DB.
+
+## Phase E6.1 - UI Read Routing (Active)
+**Status:** In Progress
+**Objective:** Route specific UI read screens to v5 Query API with fail-open logic.
+**Implemented Components:**
+-   Frontend: `V5Config.js`, `V5Router.js` (AngularJS).
+-   Screens: Alerts List, Alert Details.

@@ -33,20 +33,20 @@ class TestOffsetSafety(unittest.TestCase):
         # Simulate a message with missing tenant_id (triggers DLQ path)
         message = MagicMock()
         message.value = {"event_id": "e1", "payload": {}} # Missing tenant_id
+        message.topic = "input_topic"
+        message.partition = 0
+        message.offset = 123
+
+        # Create a mock for TopicPartition
+        tp_mock = MagicMock()
+        tp_mock.topic = "test_topic"
+        tp_mock.partition = 0
 
         # Mock poll to return one batch with one message
-        mock_consumer.poll.side_effect = [{"tp1": [message]}, Exception("StopLoop")] # Raise to stop loop
+        mock_consumer.poll.side_effect = [{tp_mock: [message]}, SystemExit("StopTest")]
 
         # Mock DLQ send to RAISE exception (simulate DLQ failure)
         mock_producer.send.side_effect = Exception("DLQ Down")
-
-        # Run main loop (will catch Exception("StopLoop") and exit)
-        # We need to catch the "StopLoop" exception or let it crash the thread/process?
-        # main() catches generic Exception in outer loop and sleeps.
-        # So we need a way to break the loop cleanly.
-        # We can patch 'time.sleep' to raise SystemExit or just let side_effect raise SystemExit
-
-        mock_consumer.poll.side_effect = [{"tp1": [message]}, SystemExit("StopTest")]
 
         try:
             main.main()

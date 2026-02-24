@@ -2,17 +2,18 @@ import psycopg2
 import logging
 import os
 from typing import Dict, Tuple, Optional, List
+from config.secrets import get_secret
 
 logger = logging.getLogger("correlation-db")
 
 class Database:
     def __init__(self):
         self.conn = None
-        self.host = os.getenv("POSTGRES_HOST", "postgres")
-        self.port = int(os.getenv("POSTGRES_PORT", 5432))
-        self.db = os.getenv("POSTGRES_DB", "v5_events")
-        self.user = os.getenv("POSTGRES_USER", "hive")
-        self.password = os.getenv("POSTGRES_PASSWORD", "hive")
+        self.host = get_secret("POSTGRES_HOST", "postgres")
+        self.port = int(get_secret("POSTGRES_PORT", 5432))
+        self.db = get_secret("POSTGRES_DB", "v5_events")
+        self.user = get_secret("POSTGRES_USER", required=True)
+        self.password = get_secret("POSTGRES_PASSWORD", required=True)
         self._connect()
 
     def _connect(self):

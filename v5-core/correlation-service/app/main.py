@@ -6,14 +6,16 @@ import logging
 import signal
 import sys
 import threading
+
+# Mount Common Reliability
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../common')))
+
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import KafkaError
 import psycopg2
 from db import Database
 from rules import RuleEngine
 
-# Mount Common Reliability
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../common')))
 from reliability.dlq import build_dlq_event, send_dlq
 from reliability.commit import commit_if_safe
 from reliability.retry import execute_with_retry

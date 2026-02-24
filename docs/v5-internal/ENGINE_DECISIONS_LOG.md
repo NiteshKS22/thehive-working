@@ -281,3 +281,39 @@ We need to migrate the UI to use the v5 Engine without rewriting the entire fron
 ### Consequences
 -   **Pros:** incremental migration, risk mitigation via fallback.
 -   **Cons:** Dual maintenance of API contracts in frontend logic.
+
+## ADR-033: Version-based Conflict Resolution
+
+### Status
+Accepted
+
+### Context
+Using `updated_at` timestamps for conflict resolution is fragile due to clock skew between distributed systems (v4 vs v5).
+
+### Decision
+We will use an integer `entity_version` column in all stateful tables.
+1.  **Increments:** Every mutation increments version.
+2.  **Sync:** Incoming events are applied only if `incoming.version > existing.version`.
+3.  **Bridge:** v4 must provide version numbers (mapped from its internal sequence or revision).
+
+### Consequences
+-   **Pros:** Deterministic, skew-independent.
+-   **Cons:** Requires schema migration.
+
+## ADR-034: Long-term Postgres-backed Deduplication
+
+### Status
+Accepted
+
+### Context
+Redis is ephemeral. If an alert is re-ingested after the Redis key expires (e.g. 1 hour), it creates a duplicate.
+
+### Decision
+We will add a persistent PostgreSQL check in the Dedup Service.
+1.  **Table:** `alert_fingerprints` (tenant_id, fingerprint, original_event_id).
+2.  **Flow:** Redis Burst Check -> Postgres Existence Check -> Emit.
+3.  **Fail-Closed:** If DB is down, ingestion halts (backpressure).
+
+### Consequences
+-   **Pros:** Guaranteed uniqueness.
+-   **Cons:** Higher latency per alert (DB write).

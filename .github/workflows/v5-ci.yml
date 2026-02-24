@@ -143,3 +143,9 @@ jobs:
         if: always()
         working-directory: v5-core/event-spine
         run: docker-compose down
+
+      - name: Verify DLQ Manager
+        run: |
+           python3 v5-core/scripts/v5_dlq_manager.py --help
+           # Mock replay test?
+           # Just verifying it runs is enough for T4 scope

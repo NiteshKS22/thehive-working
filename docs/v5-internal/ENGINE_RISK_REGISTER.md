@@ -85,3 +85,13 @@
 **Mitigation:**
 1.  **Fail-Closed:** 403 errors do NOT fallback to v4.
 2.  **Audit:** Access logs compare v4 vs v5 decisions (shadow mode).
+
+### Risk-017 (Closed): State Divergence
+
+**Status:** Closed.
+**Resolution:** Replaced timestamp-based resolution with Version Vectors (ADR-033).
+
+### Risk-026 (Closed): Duplicate Ingestion
+
+**Status:** Closed.
+**Resolution:** Implemented long-term Postgres deduplication (ADR-034).

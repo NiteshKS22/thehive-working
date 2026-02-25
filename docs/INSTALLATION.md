@@ -80,3 +80,89 @@ To upgrade to a newer version of NeuralVyuha:
 1.  Pull the latest code: `git pull origin main`.
 2.  Rebuild images: `docker-compose build`.
 3.  Restart services: `docker-compose up -d`.
+
+## 7. Starting Microservices (Manual Dev Mode)
+By default, the `nv-core/event-spine/docker-compose.yml` only starts the infrastructure (Redpanda, Redis, Postgres, OpenSearch). To run the NeuralVyuha microservices, you must build and run them separately or add them to a full docker-compose file.
+
+### 7.1 Creating a Full Stack Compose File
+Create a new file `docker-compose.full.yml` in the root directory:
+
+```yaml
+version: '3.8'
+services:
+  # Infrastructure (Include or reference event-spine)
+  # ... (Copy from event-spine or use extends)
+
+  # Microservices
+  nv-ingest:
+    build: nv-core/nv-ingest
+    image: nv-ingest:latest
+    container_name: nv-ingest
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=nv-redpanda:29092
+      - JWT_SECRET=dev-secret-do-not-use-in-prod
+    ports:
+      - "8000:8000"
+    networks:
+      - nv-mesh
+    depends_on:
+      nv-redpanda:
+        condition: service_healthy
+
+  nv-query:
+    build: nv-core/nv-query
+    image: nv-query:latest
+    container_name: nv-query
+    environment:
+      - OPENSEARCH_HOST=nv-opensearch
+      - POSTGRES_HOST=nv-postgres
+      - POSTGRES_PASSWORD=hive
+      - POSTGRES_DB=nv_vault
+      - JWT_SECRET=dev-secret-do-not-use-in-prod
+    ports:
+      - "8001:8001"
+    networks:
+      - nv-mesh
+    depends_on:
+      nv-opensearch:
+        condition: service_healthy
+      nv-postgres:
+        condition: service_healthy
+
+  nv-case-engine:
+    build: nv-core/nv-case-engine
+    image: nv-case-engine:latest
+    container_name: nv-case-engine
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=nv-redpanda:29092
+      - POSTGRES_HOST=nv-postgres
+      - POSTGRES_PASSWORD=hive
+      - POSTGRES_DB=nv_vault
+      - JWT_SECRET=dev-secret-do-not-use-in-prod
+    ports:
+      - "8002:8000"
+    networks:
+      - nv-mesh
+    depends_on:
+      nv-redpanda:
+        condition: service_healthy
+      nv-postgres:
+        condition: service_healthy
+
+  # ... (Add nv-dedup, nv-indexer, nv-correlation, nv-group-indexer similarly)
+
+networks:
+  nv-mesh:
+    external: true # Or define if running standalone
+```
+
+### 7.2 Running
+```bash
+# 1. Start Infrastructure
+cd nv-core/event-spine
+docker-compose up -d
+
+# 2. Build and Start Services
+cd ../..
+docker-compose -f docker-compose.full.yml up -d --build
+```

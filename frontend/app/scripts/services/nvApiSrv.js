@@ -9,9 +9,6 @@
         function handleError(err, context) {
             if (err.status === 403) {
                 NotificationSrv.error('Permission Denied', 'You do not have permission to view ' + context);
-                // Fail Open: Return empty/safe result so UI doesn't crash, or reject?
-                // Requirement: "Show a clean 'Service Unavailable' state, don't crash the v4 UI shell."
-                // Rejecting allows the controller to handle loading state.
                 return $q.reject(err);
             }
             if (err.status === 404) {
@@ -20,21 +17,21 @@
 
             // For other errors (500, timeout), show warning but don't spam notifications if it's just connectivity
             console.warn('NeuralVyuha API Error [' + context + ']:', err);
-            NotificationSrv.error('Service Unavailable', 'NeuralVyuha services are currently unreachable.');
+            // NotificationSrv.error('Service Unavailable', 'NeuralVyuha services are currently unreachable.');
+            // Suppress global error to allow fallback logic to proceed silently if needed
             return $q.reject(err);
         }
 
         function getHeaders() {
             var headers = {};
-            // Attempt to attach JWT if available in current user context
             if (AuthenticationSrv.currentUser && AuthenticationSrv.currentUser.token) {
                 headers.Authorization = 'Bearer ' + AuthenticationSrv.currentUser.token;
             }
             return headers;
         }
 
+        // --- Groups (Incidents) ---
         service.getGroups = function (params) {
-            // params: status, severity, limit, offset
             return $http.get(baseUrl + '/groups', {
                 params: params,
                 headers: getHeaders(),
@@ -65,6 +62,46 @@
                 return res.data;
             }).catch(function (err) {
                 return handleError(err, 'Incident Timeline');
+            });
+        };
+
+        // --- Cases (Read-Path Migration) ---
+        service.getCases = function(params) {
+            return $http.get(baseUrl + '/cases', {
+                params: params,
+                headers: getHeaders(),
+                timeout: NvConfig.timeoutMs
+            }).then(function(res) {
+                return res.data;
+            }).catch(function(err) {
+                return handleError(err, 'Case List');
+            });
+        };
+
+        service.getCase = function(id) {
+            return $http.get(baseUrl + '/cases/' + id, {
+                headers: getHeaders(),
+                timeout: NvConfig.timeoutMs
+            }).then(function(res) {
+                var data = res.data;
+                // Mark as NV source for UI badges
+                if (data) {
+                    data._source = 'NV';
+                }
+                return data;
+            }).catch(function(err) {
+                return handleError(err, 'Case Detail');
+            });
+        };
+
+        service.getCaseTimeline = function(id) {
+             return $http.get(baseUrl + '/cases/' + id + '/timeline', {
+                headers: getHeaders(),
+                timeout: NvConfig.timeoutMs
+            }).then(function(res) {
+                return res.data;
+            }).catch(function(err) {
+                return handleError(err, 'Case Timeline');
             });
         };
 

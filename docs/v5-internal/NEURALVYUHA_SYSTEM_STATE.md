@@ -406,3 +406,10 @@ Harden the engine for production deployment (GA readiness).
     *   `NvGroupListCtrl`: Controller for incidents list.
     *   `NvGroupDetailCtrl`: Controller for incident timeline.
 *   **Routing**: Added `/nv/incidents` routes to AngularJS shell.
+
+## UI Evolution (Phase E6.3)
+*   **Read-Path Migration**:
+    *   Case List: Migrated to `NvApiSrv` (primary) with v4 fallback.
+    *   Case Details: Migrated to `NvApiSrv` (primary) with v4 fallback.
+    *   Timeline: Added Unified Timeline view fetching from NV event spine.
+*   **Consistency**: Implemented "NV" badge for data provenance visibility.

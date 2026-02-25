@@ -8,7 +8,7 @@
                 <updatable-simple-text on-update="updateField('title', newValue)" value="caze.title"></updatable-simple-text>
             </dd>
             <dd ng-if="!canEdit">
-                {{caze.title}}
+                {{caze.title}} <span class="label label-primary" ng-if="caze._source === 'NV'">NV</span>
             </dd>
         </dl>
 
@@ -144,4 +144,27 @@
             </tr>
         </tbody>
     </table>
+</div>
+
+<div class="case-timeline vpad10" ng-if="nvTimeline && nvTimeline.length > 0">
+    <h4 class="vpad10 text-primary">Unified Timeline (NeuralVyuha)</h4>
+    <ul class="timeline">
+        <li ng-repeat="item in nvTimeline">
+            <i class="fa fa-envelope bg-blue" ng-if="item.type == 'note'"></i>
+            <i class="fa fa-tasks bg-green" ng-if="item.type == 'task'"></i>
+            <i class="fa fa-link bg-yellow" ng-if="item.type == 'link'"></i>
+            <div class="timeline-item">
+                <span class="time"><i class="fa fa-clock-o"></i> {{item.ts | date:'shortTime'}}</span>
+                <h3 class="timeline-header" ng-if="item.type == 'task'">Task: {{item.title}} <small>({{item.status}})</small></h3>
+                <h3 class="timeline-header" ng-if="item.type == 'note'">Note by {{item.user}}</h3>
+                <h3 class="timeline-header" ng-if="item.type == 'link'">Linked Alert: {{item.alert_id}}</h3>
+                <div class="timeline-body" ng-if="item.body">
+                    <div marked="item.body" class="markdown"></div>
+                </div>
+            </div>
+        </li>
+        <li>
+            <i class="fa fa-clock-o bg-gray"></i>
+        </li>
+    </ul>
 </div>

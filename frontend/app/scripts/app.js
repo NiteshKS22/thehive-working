@@ -537,7 +537,25 @@ angular.module('thehive', [
                     isSuperAdmin: false
                 }
             })
-            .state('app.alert-list', {
+                        .state('app.nv-incidents', {
+                url: '/nv/incidents',
+                templateUrl: 'views/nv/nvGroupList.html',
+                controller: 'NvGroupListCtrl',
+                controllerAs: '$vm',
+                guard: {
+                    isSuperAdmin: false
+                }
+            })
+            .state('app.nv-group-detail', {
+                url: '/nv/incidents/:id',
+                templateUrl: 'views/nv/nvGroupDetail.html',
+                controller: 'NvGroupDetailCtrl',
+                controllerAs: '$vm',
+                guard: {
+                    isSuperAdmin: false
+                }
+            })
+.state('app.alert-list', {
                 url: 'alert/list',
                 templateUrl: 'views/partials/alert/list.html',
                 controller: 'AlertListCtrl',

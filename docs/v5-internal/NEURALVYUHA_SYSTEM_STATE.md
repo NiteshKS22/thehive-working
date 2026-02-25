@@ -398,3 +398,11 @@ Harden the engine for production deployment (GA readiness).
 **Implemented Components:**
 -   Frontend: `NvConfig.js`, `NvRouter.js` (AngularJS).
 -   Screens: Alerts List, Alert Details.
+
+## UI Evolution (Phase E6.2)
+*   **Dashboard**: Implemented "NeuralVyuha Incidents" dashboard.
+*   **Components**:
+    *   `NvApiSrv`: Unified API client for `nv-query`.
+    *   `NvGroupListCtrl`: Controller for incidents list.
+    *   `NvGroupDetailCtrl`: Controller for incident timeline.
+*   **Routing**: Added `/nv/incidents` routes to AngularJS shell.

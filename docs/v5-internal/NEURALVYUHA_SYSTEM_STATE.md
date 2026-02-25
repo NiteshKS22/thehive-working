@@ -413,3 +413,14 @@ Harden the engine for production deployment (GA readiness).
     *   Case Details: Migrated to `NvApiSrv` (primary) with v4 fallback.
     *   Timeline: Added Unified Timeline view fetching from NV event spine.
 *   **Consistency**: Implemented "NV" badge for data provenance visibility.
+
+## Write-Path Migration (Phase E6.4)
+*   **Master of Record**: NeuralVyuha (v5).
+*   **Write Strategy**: Direct write to NV, async sync to v4.
+*   **Components**:
+    *   `NvApiSrv`: Extended with `createCase`, `createTask`, `createTaskLog`.
+    *   `CaseSrv.js`: Overridden `save` method.
+    *   `CaseTaskSrv.js`: Overridden `save` method.
+    *   `TaskLogSrv.js`: Overridden `save` method.
+    *   `reverse-bridge`: New service mirroring NV events to v4.
+*   **Panic Switch**: Enabled via `NvConfig.MASTER_WRITE_TARGET`.

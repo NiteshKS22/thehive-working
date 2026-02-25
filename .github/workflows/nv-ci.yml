@@ -28,6 +28,7 @@ jobs:
           pip install -r nv-core/nv-correlation/requirements.txt
           pip install -r nv-core/nv-query/requirements.txt
           pip install -r nv-core/nv-case-engine/requirements.txt
+          pip install -r nv-core/reverse-bridge/requirements.txt
           pip install pytest httpx pyyaml pyjwt cryptography fastapi requests
 
       - name: Test Services (Unit)
@@ -39,7 +40,6 @@ jobs:
 
       - name: Build Docker Images
         run: |
-          # Copy common lib to service directories for build context
           cp -r nv-core/common nv-core/nv-ingest/
           cp -r nv-core/common nv-core/nv-query/
           cp -r nv-core/common nv-core/nv-case-engine/
@@ -55,6 +55,7 @@ jobs:
           docker build -t nv-correlation:ci nv-core/nv-correlation/
           docker build -t nv-group-indexer:ci nv-core/nv-group-indexer/
           docker build -t nv-case-engine:ci nv-core/nv-case-engine/
+          docker build -t reverse-bridge:ci nv-core/reverse-bridge/
 
       - name: Start nv-mesh Stack
         working-directory: nv-core/event-spine
@@ -91,7 +92,6 @@ jobs:
 
       - name: Start App Services
         run: |
-          # The network 'nv-mesh' is created by docker-compose because we added it to the file.
           NETWORK_NAME="nv-mesh"
 
           docker run -d --name nv-ingest --network $NETWORK_NAME             -p 8000:8000             -e KAFKA_BOOTSTRAP_SERVERS=nv-redpanda:29092             -e JWT_SECRET="dev-secret-do-not-use-in-prod"             nv-ingest:ci
@@ -108,14 +108,60 @@ jobs:
 
           docker run -d --name nv-group-indexer --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=nv-redpanda:29092             -e OPENSEARCH_HOST=nv-opensearch             nv-group-indexer:ci
 
+          docker run -d --name reverse-bridge --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=nv-redpanda:29092             -e V4_API_URL=http://mock-v4:9000/api             reverse-bridge:ci
+
           sleep 10
 
       - name: Verify UI Routing Targets
         env:
           TOKEN: ${{ steps.token.outputs.TOKEN }}
         run: |
-          # Use nv-mesh network to reach nv-query
           docker run --network nv-mesh             -v $(pwd)/.github/scripts:/scripts             -e QUERY_API_URL=http://nv-query:8001             -e AUTH_TOKEN="$TOKEN"             python:3.10-slim sh -c "pip install requests && python /scripts/verify_ui_routing.py"
+
+      - name: Verify Reverse Bridge
+        env:
+          TOKEN: ${{ steps.token.outputs.TOKEN }}
+        run: |
+           cat <<SCRIPT > verify_bridge.py
+           import requests
+           import os
+           import uuid
+           import time
+           import sys
+
+           TOKEN = os.getenv("TOKEN")
+           CASE_URL = "http://localhost:8002/cases"
+
+           headers = {"Authorization": f"Bearer {TOKEN}", "Idempotency-Key": str(uuid.uuid4())}
+           data = {"title": "CI Test Case for Bridge", "severity": 2, "tlp": 2}
+
+           try:
+               print("Creating case in NV...")
+               resp = requests.post(CASE_URL, json=data, headers=headers)
+               if resp.status_code == 200 or resp.status_code == 201:
+                   cid = resp.json().get("case_id")
+                   print(f"Created Case {cid}")
+               else:
+                   print(f"Failed to create case: {resp.status_code} {resp.text}")
+                   sys.exit(1)
+           except Exception as e:
+               print(f"Error: {e}")
+               sys.exit(1)
+           SCRIPT
+
+           pip install requests
+           python3 verify_bridge.py
+
+           sleep 5
+
+           if docker logs reverse-bridge 2>&1 | grep -q "Mirroring CaseCreated to v4"; then
+               echo "SUCCESS: Reverse Bridge attempted to mirror case."
+           else
+               echo "FAILURE: Reverse Bridge did not log mirroring attempt."
+               docker logs reverse-bridge
+               # Fails workflow
+               false
+           fi
 
       - name: Stop Stack
         if: always()
@@ -124,5 +170,4 @@ jobs:
 
       - name: Verify DLQ Manager
         run: |
-           # Verify it runs (just help command)
            python3 nv-core/scripts/nv_dlq_manager.py --help

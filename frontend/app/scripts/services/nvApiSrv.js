@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    angular.module('theHiveServices').factory('NvApiSrv', function ($http, $q, NvConfig, NotificationSrv, AuthenticationSrv) {
+    angular.module('theHiveServices').factory('NvApiSrv', function ($http, $q, NvConfig, NotificationSrv, AuthenticationSrv, UtilsSrv) {
         var service = {};
         var baseUrl = NvConfig.nvBaseUrl;
 
@@ -108,3 +108,61 @@
         return service;
     });
 })();
+
+        // --- Write Operations (Phase E6.4) ---
+        service.createCase = function(caze) {
+            var headers = getHeaders();
+            headers['Idempotency-Key'] = UtilsSrv.uuid(); // Assuming UtilsSrv exists or I need to implement UUID helper
+
+            return $http.post(baseUrl + '/cases', caze, {
+                headers: headers,
+                timeout: NvConfig.timeoutMs
+            }).then(function(res) {
+                return res.data;
+            }).catch(function(err) {
+                return handleError(err, 'Create Case');
+            });
+        };
+
+        service.updateCase = function(id, updates) {
+            var headers = getHeaders();
+            // Idempotency key for update? Maybe optional but good practice.
+            headers['Idempotency-Key'] = UtilsSrv.uuid();
+
+            return $http.patch(baseUrl + '/cases/' + id, updates, {
+                headers: headers,
+                timeout: NvConfig.timeoutMs
+            }).then(function(res) {
+                return res.data;
+            }).catch(function(err) {
+                return handleError(err, 'Update Case');
+            });
+        };
+
+        service.createTask = function(caseId, task) {
+            var headers = getHeaders();
+            headers['Idempotency-Key'] = UtilsSrv.uuid();
+
+            return $http.post(baseUrl + '/cases/' + caseId + '/tasks', task, {
+                headers: headers,
+                timeout: NvConfig.timeoutMs
+            }).then(function(res) {
+                return res.data;
+            }).catch(function(err) {
+                return handleError(err, 'Create Task');
+            });
+        };
+
+        service.createTaskLog = function(taskId, log) {
+             var headers = getHeaders();
+            headers['Idempotency-Key'] = UtilsSrv.uuid();
+
+            return $http.post(baseUrl + '/tasks/' + taskId + '/logs', log, {
+                headers: headers,
+                timeout: NvConfig.timeoutMs
+            }).then(function(res) {
+                return res.data;
+            }).catch(function(err) {
+                return handleError(err, 'Create Task Log');
+            });
+        };

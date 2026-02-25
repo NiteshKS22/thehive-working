@@ -200,7 +200,7 @@ def create_case(
     finally:
         conn.close()
 
-    emit_event("cases.created.v1", "CaseCreated", {
+    emit_event("nv.cases.created.v1", "CaseCreated", {
         "case_id": case_id,
         "title": req.title,
         "created_by": auth.user_id,
@@ -287,7 +287,7 @@ def update_case(
     finally:
         conn.close()
 
-    emit_event("cases.updated.v1", "CaseUpdated", {
+    emit_event("nv.cases.updated.v1", "CaseUpdated", {
         "case_id": case_id,
         "updates": req.model_dump(exclude_unset=True),
         "updated_by": auth.user_id,
@@ -295,7 +295,7 @@ def update_case(
     }, auth)
 
     if req.status == 'CLOSED':
-         emit_event("cases.closed.v1", "CaseClosed", {"case_id": case_id, "closed_by": auth.user_id}, auth)
+         emit_event("nv.cases.closed.v1", "CaseClosed", {"case_id": case_id, "closed_by": auth.user_id}, auth)
 
     return resp_body
 

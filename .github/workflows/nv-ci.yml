@@ -1,0 +1,173 @@
+name: NeuralVyuha CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'nv-core/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'nv-core/**'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r nv-core/nv-ingest/requirements.txt
+          pip install -r nv-core/nv-dedup/requirements.txt
+          pip install -r nv-core/nv-correlation/requirements.txt
+          pip install -r nv-core/nv-query/requirements.txt
+          pip install -r nv-core/nv-case-engine/requirements.txt
+          pip install -r nv-core/reverse-bridge/requirements.txt
+          pip install pytest httpx pyyaml pyjwt cryptography fastapi requests
+
+      - name: Test Services (Unit)
+        run: |
+          pytest nv-core/nv-ingest/tests/
+          pytest nv-core/nv-dedup/tests/
+          pytest nv-core/nv-correlation/tests/
+          pytest nv-core/common/auth/tests/
+
+      - name: Build Docker Images
+        run: |
+          cp -r nv-core/common nv-core/nv-ingest/
+          cp -r nv-core/common nv-core/nv-query/
+          cp -r nv-core/common nv-core/nv-case-engine/
+          cp -r nv-core/common nv-core/nv-dedup/
+          cp -r nv-core/common nv-core/nv-correlation/
+          cp -r nv-core/common nv-core/nv-indexer/
+          cp -r nv-core/common nv-core/nv-group-indexer/
+
+          docker build -t nv-ingest:ci nv-core/nv-ingest/
+          docker build -t nv-dedup:ci nv-core/nv-dedup/
+          docker build -t nv-indexer:ci nv-core/nv-indexer/
+          docker build -t nv-query:ci nv-core/nv-query/
+          docker build -t nv-correlation:ci nv-core/nv-correlation/
+          docker build -t nv-group-indexer:ci nv-core/nv-group-indexer/
+          docker build -t nv-case-engine:ci nv-core/nv-case-engine/
+          docker build -t reverse-bridge:ci nv-core/reverse-bridge/
+
+      - name: Start nv-mesh Stack
+        working-directory: nv-core/event-spine
+        run: |
+           docker-compose up -d
+           sleep 20
+
+      - name: Apply Index Templates
+        run: |
+          curl -X PUT "http://localhost:9200/_index_template/alerts_template"             -H "Content-Type: application/json"             -d @nv-core/nv-indexer/OPENSEARCH_INDEX_TEMPLATE.json
+
+          curl -X PUT "http://localhost:9200/_index_template/groups_template"             -H "Content-Type: application/json"             -d @nv-core/nv-group-indexer/GROUPS_INDEX_TEMPLATE.json
+
+      - name: Generate CI Token
+        id: token
+        run: |
+          cat <<SCRIPT > gen_token.py
+          import jwt
+          import time
+          key = "dev-secret-do-not-use-in-prod"
+          token = jwt.encode({
+              "sub": "ci-user",
+              "tenant_id": "tenant-A",
+              "roles": ["SOC_ANALYST", "CASE_WRITE"],
+              "exp": int(time.time()) + 3600,
+              "iss": "thehive-ci",
+              "aud": "neural-vyuha-engine"
+          }, key, algorithm="HS256")
+          print(token)
+          SCRIPT
+
+          TOKEN=$(python3 gen_token.py)
+          echo "TOKEN=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Start App Services
+        run: |
+          NETWORK_NAME="nv-mesh"
+
+          docker run -d --name nv-ingest --network $NETWORK_NAME             -p 8000:8000             -e KAFKA_BOOTSTRAP_SERVERS=nv-redpanda:29092             -e JWT_SECRET="dev-secret-do-not-use-in-prod"             nv-ingest:ci
+
+          docker run -d --name nv-query --network $NETWORK_NAME             -p 8001:8001             -e OPENSEARCH_HOST=nv-opensearch             -e POSTGRES_HOST=nv-postgres             -e POSTGRES_PASSWORD=hive             -e POSTGRES_DB=nv_vault             -e JWT_SECRET="dev-secret-do-not-use-in-prod"             nv-query:ci
+
+          docker run -d --name nv-case-engine --network $NETWORK_NAME             -p 8002:8000             -e KAFKA_BOOTSTRAP_SERVERS=nv-redpanda:29092             -e POSTGRES_HOST=nv-postgres             -e POSTGRES_PASSWORD=hive             -e POSTGRES_DB=nv_vault             -e JWT_SECRET="dev-secret-do-not-use-in-prod"             nv-case-engine:ci
+
+          docker run -d --name nv-dedup --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=nv-redpanda:29092             -e REDIS_HOST=nv-redis             nv-dedup:ci
+
+          docker run -d --name nv-indexer --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=nv-redpanda:29092             -e OPENSEARCH_HOST=nv-opensearch             nv-indexer:ci
+
+          docker run -d --name nv-correlation --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=nv-redpanda:29092             -e POSTGRES_HOST=nv-postgres             -e POSTGRES_PASSWORD=hive             -e POSTGRES_DB=nv_vault             nv-correlation:ci
+
+          docker run -d --name nv-group-indexer --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=nv-redpanda:29092             -e OPENSEARCH_HOST=nv-opensearch             nv-group-indexer:ci
+
+          docker run -d --name reverse-bridge --network $NETWORK_NAME             -e KAFKA_BOOTSTRAP_SERVERS=nv-redpanda:29092             -e V4_API_URL=http://mock-v4:9000/api             reverse-bridge:ci
+
+          sleep 10
+
+      - name: Verify UI Routing Targets
+        env:
+          TOKEN: ${{ steps.token.outputs.TOKEN }}
+        run: |
+          docker run --network nv-mesh             -v $(pwd)/.github/scripts:/scripts             -e QUERY_API_URL=http://nv-query:8001             -e AUTH_TOKEN="$TOKEN"             python:3.10-slim sh -c "pip install requests && python /scripts/verify_ui_routing.py"
+
+      - name: Verify Reverse Bridge
+        env:
+          TOKEN: ${{ steps.token.outputs.TOKEN }}
+        run: |
+           cat <<SCRIPT > verify_bridge.py
+           import requests
+           import os
+           import uuid
+           import time
+           import sys
+
+           TOKEN = os.getenv("TOKEN")
+           CASE_URL = "http://localhost:8002/cases"
+
+           headers = {"Authorization": f"Bearer {TOKEN}", "Idempotency-Key": str(uuid.uuid4())}
+           data = {"title": "CI Test Case for Bridge", "severity": 2, "tlp": 2}
+
+           try:
+               print("Creating case in NV...")
+               resp = requests.post(CASE_URL, json=data, headers=headers)
+               if resp.status_code == 200 or resp.status_code == 201:
+                   cid = resp.json().get("case_id")
+                   print(f"Created Case {cid}")
+               else:
+                   print(f"Failed to create case: {resp.status_code} {resp.text}")
+                   sys.exit(1)
+           except Exception as e:
+               print(f"Error: {e}")
+               sys.exit(1)
+           SCRIPT
+
+           pip install requests
+           python3 verify_bridge.py
+
+           sleep 5
+
+           if docker logs reverse-bridge 2>&1 | grep -q "Mirroring CaseCreated to v4"; then
+               echo "SUCCESS: Reverse Bridge attempted to mirror case."
+           else
+               echo "FAILURE: Reverse Bridge did not log mirroring attempt."
+               docker logs reverse-bridge
+               # Fails workflow
+               false
+           fi
+
+      - name: Stop Stack
+        if: always()
+        working-directory: nv-core/event-spine
+        run: docker-compose down
+
+      - name: Verify DLQ Manager
+        run: |
+           python3 nv-core/scripts/nv_dlq_manager.py --help

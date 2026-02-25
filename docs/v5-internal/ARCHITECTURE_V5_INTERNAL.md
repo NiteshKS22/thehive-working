@@ -1,4 +1,4 @@
-# v5-Internal Architecture
+# NeuralVyuha Architecture
 
 ## Mission
 Decouple high-value SOC functions from the legacy monolith using the Strangler Fig Pattern.

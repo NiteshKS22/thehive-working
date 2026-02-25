@@ -1,12 +1,19 @@
 (function() {
     'use strict';
 
-    angular.module('theHiveControllers').controller('CaseDetailsCtrl', function($scope, $state, $uibModal, PaginatedQuerySrv, CaseTabsSrv, UserSrv, TagSrv) {
+    angular.module('theHiveControllers').controller('CaseDetailsCtrl', function($scope, $state, $uibModal, PaginatedQuerySrv, CaseTabsSrv, UserSrv, TagSrv, NvApiSrv, NvConfig) {
 
         CaseTabsSrv.activateTab($state.current.data.tab);
 
         $scope.isDefined = false;
         $scope.state = {
+        // E6.3 NV Timeline
+        $scope.nvTimeline = null;
+        if (NvConfig && NvConfig.useNvQueryReads) {
+            NvApiSrv.getCaseTimeline($scope.caseId).then(function(data) {
+                $scope.nvTimeline = data.timeline;
+            });
+        }
             'editing': false,
             'isCollapsed': true
         };

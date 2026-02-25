@@ -18,7 +18,7 @@ flowchart TD
     Client[External Client / Analyst] -->|HTTPS + JWT| Ingest[Ingestion Service]
     Client -->|HTTPS + JWT| Query[Query API]
 
-    subgraph "Trust Boundary: v5-Internal Event Spine"
+    subgraph "Trust Boundary: NeuralVyuha Event Spine"
         Ingest -->|Kafka Proto| Redpanda[(Redpanda)]
         Dedup[Dedup Worker] <-->|Kafka Proto| Redpanda
         Dedup <-->|Redis Proto| Redis[(Redis)]

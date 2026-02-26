@@ -17,6 +17,8 @@ if [ ! -f conf/application.conf ]; then
     sed -i 's|include "/etc/thehive/secret.conf"|play.http.secret.key="changeme"|g' conf/application.conf
     # Set local storage paths
     sed -i 's|/opt/thp/thehive|./data|g' conf/application.conf
+    # Switch storage backend to inmemory
+    sed -i 's|storage.backend: berkeleyje|storage.backend: inmemory|g' conf/application.conf
     # Create data directories
     mkdir -p data/database data/index
 fi

@@ -2,11 +2,11 @@
 set -e
 
 echo "Installing global frontend tools..."
-npm install -g bower grunt-cli
+npm install --legacy-peer-deps -g bower grunt-cli
 
 echo "Installing frontend dependencies..."
 cd frontend
-npm install
+npm install --legacy-peer-deps
 bower install
 cd ..
 

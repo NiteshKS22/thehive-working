@@ -50,3 +50,9 @@ This project is licensed under the AGPL-3.0 License. See [LICENSE](LICENSE) for 
 
 ## Contact
 For internal development inquiries, please refer to the internal engineering wiki.
+
+### Legacy Development
+To run the legacy TheHive application locally:
+1. Ensure Java 8/11 is installed.
+2. Run `./setup_dev.sh` to install dependencies and configure the application.
+3. Run `./sbt run` to start the server on port 9000.

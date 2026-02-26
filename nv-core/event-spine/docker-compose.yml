@@ -28,7 +28,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:7.2-alpine
+    image: public.ecr.aws/docker/library/redis:7.2-alpine
     container_name: nv-redis
     command: ["redis-server", "--appendonly", "yes"]
     ports:
@@ -42,7 +42,7 @@ services:
       retries: 5
 
   opensearch:
-    image: opensearchproject/opensearch:2.11.0
+    image: public.ecr.aws/opensearchproject/opensearch:2.11.0
     container_name: nv-opensearch
     environment:
       - cluster.name=nv-cluster
@@ -70,7 +70,7 @@ services:
       retries: 5
 
   opensearch-dashboards:
-    image: opensearchproject/opensearch-dashboards:2.11.0
+    image: public.ecr.aws/opensearchproject/opensearch-dashboards:2.11.0
     container_name: nv-opensearch-dashboards
     ports:
       - 5601:5601
@@ -81,7 +81,7 @@ services:
       - opensearch
 
   postgres:
-    image: postgres:14-alpine
+    image: public.ecr.aws/docker/library/postgres:14-alpine
     container_name: nv-postgres
     environment:
       - POSTGRES_USER=hive

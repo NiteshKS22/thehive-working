@@ -11,12 +11,21 @@ from fastapi import FastAPI, HTTPException, Response, status, Depends, Body, Que
 from opensearchpy import OpenSearch
 from typing import Dict, Any, Optional, List
 
-# Mount Common Auth
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../common')))
-from auth.middleware import get_auth_context, AuthContext, validate_auth_config, require_permission
-from auth.rbac import PERM_ALERT_READ, PERM_CASE_READ, PERM_RULE_SIMULATE
-from observability.metrics import MetricsMiddleware, get_metrics_response
-from observability.health import global_health_registry
+# Robust common library discovery (handles local dev and Docker context)
+_base_dir = os.path.dirname(__file__)
+_paths_to_check = [
+    os.path.abspath(os.path.join(_base_dir, '../../')), # Local dev (parent of common)
+    os.path.abspath(os.path.join(_base_dir, '../')),     # Docker (parent of common)
+]
+for _p in _paths_to_check:
+    if os.path.exists(os.path.join(_p, 'common')):
+        sys.path.append(_p)
+        break
+
+from common.auth.middleware import get_auth_context, AuthContext, validate_auth_config, require_permission
+from common.auth.rbac import PERM_ALERT_READ, PERM_CASE_READ, PERM_RULE_SIMULATE, PERM_GRAPH_READ
+from common.observability.metrics import MetricsMiddleware, get_metrics_response
+from common.observability.health import global_health_registry
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
@@ -54,8 +63,8 @@ INDEX_GROUPS = "groups-v1"
 PG_HOST = os.getenv("POSTGRES_HOST", "postgres")
 PG_PORT = int(os.getenv("POSTGRES_PORT", 5432))
 PG_DB = os.getenv("POSTGRES_DB", "nv_vault")
-PG_USER = os.getenv("POSTGRES_USER", "hive")
-PG_PASSWORD = os.getenv("POSTGRES_PASSWORD", "hive")
+PG_USER = os.getenv("POSTGRES_USER", "nv_user")
+PG_PASSWORD = os.getenv("POSTGRES_PASSWORD", "nv_pass")
 
 os_client = OpenSearch(
     hosts=[{'host': OPENSEARCH_HOST, 'port': OPENSEARCH_PORT}],
@@ -91,6 +100,29 @@ def metrics():
 @app.get("/health")
 def health_check():
     return healthz()
+
+@app.get("/v1/user/current")
+def get_current_user(auth: AuthContext = Depends(get_auth_context)):
+    return {
+        "login": auth.user_id if auth.user_id != "dev-user" else "admin@neuralvyuha.local",
+        "name": "Administrator",
+        "organisation": "admin",
+        "roles": auth.roles,
+        "permissions": list(auth.permissions)
+    }
+
+@app.get("/status")
+def get_status():
+    return {
+        "version": "4.1.24-NV-ZENITH",
+        "connectors": {
+            "cortex": { "enabled": True, "status": "OK", "servers": [] },
+            "misp": { "enabled": True, "status": "OK", "servers": [] }
+        },
+        "config": {
+            "ssoAutoLogin": False
+        }
+    }
 
 @app.get("/alerts")
 def search_alerts(
@@ -471,3 +503,273 @@ def get_case_timeline(case_id: str, auth: AuthContext = Depends(require_permissi
     
     timeline.sort(key=lambda x: x['ts'], reverse=True)
     return {"case_id": case_id, "timeline": timeline}
+
+
+# ─── E8.1 Visual Vyuha — Graph Traversal API ──────────────────────────────────
+#
+# GET /graph/case/{case_id}
+#
+# Builds a node-link graph seeded from one Case:
+#   • Collects every observable linked to the case.
+#   • Finds all SAME-TENANT cases that share those observables.
+#   • Cross-tenant hits are anonymized ("ANON" node, no IDs exposed).
+#   • Hard cap of MAX_GRAPH_NODES to protect canvas performance.
+#
+# Response schema:
+#   { nodes: [{id, label, node_type, tenant_id}], edges: [{source, target, label, observable}],
+#     truncated: bool }
+#
+# Node types: "case" | "ip" | "file" | "user" | "hash" | "domain" | "cross_tenant"
+
+MAX_GRAPH_NODES = 500
+
+
+def _get_case_observables(cur, tenant_id: str, case_id: str):
+    """Returns [(observable_value, observable_type)] linked to the case."""
+    observables = []
+
+    # Pull from case_alert_links → observable info stored in linked alerts (OpenSearch)
+    cur.execute(
+        "SELECT original_event_id FROM case_alert_links WHERE tenant_id = %s AND case_id = %s",
+        (tenant_id, case_id)
+    )
+    alert_ids = [r[0] for r in cur.fetchall()]
+    return alert_ids  # We'll resolve observables from alert payloads via OpenSearch
+
+
+def _get_artifact_hashes(cur, tenant_id: str, case_id: str):
+    """Returns [(sha256, filename)] for artifacts attached to the case."""
+    try:
+        cur.execute(
+            "SELECT sha256, filename FROM artifacts WHERE tenant_id = %s AND case_id = %s",
+            (tenant_id, case_id)
+        )
+        return cur.fetchall()
+    except Exception:
+        return []
+
+
+def _resolve_alert_observables(alert_ids: list, tenant_id: str) -> list:
+    """Fetch observable fields from OpenSearch alert docs for graph construction."""
+    if not alert_ids:
+        return []
+    try:
+        resp = os_client.search(
+            body={
+                "query": {"ids": {"values": alert_ids}},
+                "size": len(alert_ids),
+                "_source": ["tenant_id", "src_ip", "dst_ip", "file_hash", "username", "domain"]
+            },
+            index=INDEX_ALERTS
+        )
+        observables = []
+        for hit in resp["hits"]["hits"]:
+            src = hit["_source"]
+            if src.get("tenant_id") != tenant_id:
+                continue  # Defence-in-depth tenant check
+            if src.get("src_ip"):
+                observables.append({"value": src["src_ip"], "type": "ip"})
+            if src.get("dst_ip"):
+                observables.append({"value": src["dst_ip"], "type": "ip"})
+            if src.get("file_hash"):
+                observables.append({"value": src["file_hash"], "type": "hash"})
+            if src.get("username"):
+                observables.append({"value": src["username"], "type": "user"})
+            if src.get("domain"):
+                observables.append({"value": src["domain"], "type": "domain"})
+        return observables
+    except Exception as e:
+        logger.warning(f"graph: failed to resolve alert observables: {e}")
+        return []
+
+
+def _find_cases_sharing_observable(cur, own_tenant_id: str, obs_value: str, obs_type: str, exclude_case_id: str) -> list:
+    """
+    Find cases that share an observable (by IP/hash/user/domain).
+    Returns list of dicts with {case_id, tenant_id, title}.
+    Cross-tenant cases have title/case_id anonymized.
+    """
+    # Map observable type to field in alerts index (we'll do this via OpenSearch)
+    field_map = {"ip": ["src_ip", "dst_ip"], "hash": ["file_hash"], "user": ["username"], "domain": ["domain"]}
+    fields = field_map.get(obs_type, [])
+    if not fields:
+        return []
+
+    # Build OS query: match observable in any relevant field
+    should_clauses = [{"term": {f: obs_value}} for f in fields]
+    try:
+        resp = os_client.search(
+            body={
+                "query": {"bool": {"should": should_clauses, "minimum_should_match": 1}},
+                "size": 100,
+                "_source": ["tenant_id", "case_id"]
+            },
+            index=INDEX_ALERTS
+        )
+    except Exception as e:
+        logger.warning(f"graph: observable search failed: {e}")
+        return []
+
+    results = []
+    seen_cases = set()
+    for hit in resp["hits"]["hits"]:
+        src = hit["_source"]
+        c_id = src.get("case_id")
+        if not c_id or c_id == exclude_case_id or c_id in seen_cases:
+            continue
+        seen_cases.add(c_id)
+        t_id = src.get("tenant_id", "")
+
+        if t_id == own_tenant_id:
+            # Fetch case title from Postgres
+            try:
+                cur.execute("SELECT title FROM cases WHERE tenant_id = %s AND case_id = %s", (t_id, c_id))
+                row = cur.fetchone()
+                title = row[0] if row else c_id
+            except Exception:
+                title = c_id
+            results.append({"case_id": c_id, "tenant_id": t_id, "title": title, "cross_tenant": False})
+        else:
+            # TENANT_PRIVACY: anonymize cross-tenant hit — no IDs, no names
+            results.append({
+                "case_id": f"ANON_{hashlib.sha256(c_id.encode()).hexdigest()[:8]}",
+                "tenant_id": "REDACTED",
+                "title": "Seen in another tenant",
+                "cross_tenant": True
+            })
+    return results
+
+
+@app.get("/graph/case/{case_id}")
+def get_case_graph(
+    case_id: str,
+    auth: AuthContext = Depends(require_permission(PERM_GRAPH_READ))
+):
+    """
+    Visual Vyuha Graph API — returns a node-link graph seeded from a Case.
+
+    Response: { nodes: [...], edges: [...], truncated: bool }
+    Node types: case | ip | file | user | hash | domain | cross_tenant
+    Node colours are assigned by the UI (Red=case, Blue=ip/domain, Green=file/hash, Yellow=user).
+    """
+    conn = get_db_conn()
+    nodes: dict = {}   # node_id -> node dict
+    edges: list = []
+    truncated = False
+
+    try:
+        with conn.cursor() as cur:
+            # 1. Verify seed case exists and belongs to tenant
+            cur.execute(
+                "SELECT title, severity, status FROM cases WHERE tenant_id = %s AND case_id = %s",
+                (auth.tenant_id, case_id)
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Case not found")
+
+            seed_title, seed_severity, seed_status = row[0], row[1], row[2]
+
+            # Add seed case node
+            nodes[case_id] = {
+                "id": case_id,
+                "label": seed_title,
+                "node_type": "case",
+                "severity": seed_severity,
+                "status": seed_status,
+                "tenant_id": auth.tenant_id
+            }
+
+            # 2. Collect linked alert IDs
+            alert_ids = _get_case_observables(cur, auth.tenant_id, case_id)
+
+            # 3. Resolve observables from alert docs
+            observables = _resolve_alert_observables(alert_ids, auth.tenant_id)
+
+            # 4. Add artifact hashes as observables
+            artifact_hashes = _get_artifact_hashes(cur, auth.tenant_id, case_id)
+            for (sha256, filename) in artifact_hashes:
+                observables.append({"value": sha256, "type": "hash", "label": filename or sha256[:16]})
+
+            # 5. For each observable: create observable node + find sibling cases
+            seen_edges = set()
+
+            for obs in observables:
+                obs_value = obs["value"]
+                obs_type = obs["type"]
+                obs_label = obs.get("label", obs_value)
+                obs_node_id = f"{obs_type}:{obs_value}"
+
+                if len(nodes) >= MAX_GRAPH_NODES:
+                    truncated = True
+                    break
+
+                # Add observable node if needed
+                if obs_node_id not in nodes:
+                    nodes[obs_node_id] = {
+                        "id": obs_node_id,
+                        "label": obs_label,
+                        "node_type": obs_type,
+                        "tenant_id": auth.tenant_id
+                    }
+
+                # Edge: seed case → observable
+                edge_key = f"{case_id}|{obs_node_id}"
+                if edge_key not in seen_edges:
+                    edges.append({
+                        "source": case_id,
+                        "target": obs_node_id,
+                        "label": "has_observable",
+                        "observable": obs_value
+                    })
+                    seen_edges.add(edge_key)
+
+                # 6. Find sibling cases sharing this observable
+                sibling_cases = _find_cases_sharing_observable(
+                    cur, auth.tenant_id, obs_value, obs_type, case_id
+                )
+
+                for sibling in sibling_cases:
+                    sibling_id = sibling["case_id"]
+
+                    if len(nodes) >= MAX_GRAPH_NODES:
+                        truncated = True
+                        break
+
+                    if sibling_id not in nodes:
+                        node_type = "cross_tenant" if sibling["cross_tenant"] else "case"
+                        nodes[sibling_id] = {
+                            "id": sibling_id,
+                            "label": sibling["title"],
+                            "node_type": node_type,
+                            "tenant_id": sibling["tenant_id"]
+                        }
+
+                    # Edge: sibling case → observable (or direct sibling→seed edge)
+                    sibling_obs_key = f"{sibling_id}|{obs_node_id}"
+                    if sibling_obs_key not in seen_edges:
+                        edges.append({
+                            "source": sibling_id,
+                            "target": obs_node_id,
+                            "label": "shares_observable",
+                            "observable": obs_value
+                        })
+                        seen_edges.add(sibling_obs_key)
+
+    finally:
+        conn.close()
+
+    logger.info(
+        f"graph: case={case_id} tenant={auth.tenant_id} "
+        f"nodes={len(nodes)} edges={len(edges)} truncated={truncated}"
+    )
+
+    return {
+        "seed_case_id": case_id,
+        "nodes": list(nodes.values()),
+        "edges": edges,
+        "truncated": truncated,
+        "node_count": len(nodes),
+        "edge_count": len(edges)
+    }
+

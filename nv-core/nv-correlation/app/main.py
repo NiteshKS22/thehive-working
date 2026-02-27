@@ -12,12 +12,21 @@ import psycopg2
 from db import Database
 from rules import RuleEngine
 
-# Mount Common Reliability
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../common')))
-from reliability.dlq import build_dlq_event, send_dlq
-from reliability.commit import commit_if_safe
-from reliability.retry import execute_with_retry
-from reliability.backpressure import check_backpressure
+# Robust common library discovery (handles local dev and Docker context)
+_base_dir = os.path.dirname(__file__)
+_paths_to_check = [
+    os.path.abspath(os.path.join(_base_dir, '../../')), # Local dev (parent of common)
+    os.path.abspath(os.path.join(_base_dir, '../')),     # Docker (parent of common)
+]
+for _p in _paths_to_check:
+    if os.path.exists(os.path.join(_p, 'common')):
+        sys.path.append(_p)
+        break
+
+from common.reliability.dlq import build_dlq_event, send_dlq
+from common.reliability.commit import commit_if_safe
+from common.reliability.retry import execute_with_retry
+from common.reliability.backpressure import check_backpressure
 
 # Metrics
 from metrics_server import start_metrics_server, MESSAGES_PROCESSED, DLQ_PUBLISHED, RETRIES_TOTAL, BACKPRESSURE_EVENTS, CONSUMER_LAG

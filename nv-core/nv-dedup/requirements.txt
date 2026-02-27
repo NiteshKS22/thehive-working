@@ -3,3 +3,7 @@ redis
 pydantic
 python-dotenv
 psycopg2-binary==2.9.9
+prometheus-client
+requests
+cryptography
+pyjwt

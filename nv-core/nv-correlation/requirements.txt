@@ -2,3 +2,7 @@ kafka-python
 psycopg2-binary
 pyyaml
 pydantic
+prometheus-client
+requests
+cryptography
+pyjwt

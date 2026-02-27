@@ -10,12 +10,21 @@ from typing import Dict, Any, Optional
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 
-# Import Auth Middleware
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../common')))
-from auth.middleware import get_auth_context, AuthContext, validate_auth_config, require_permission
-from auth.rbac import PERM_ALERT_INGEST
-from observability.metrics import MetricsMiddleware, get_metrics_response
-from observability.health import global_health_registry
+# Robust common library discovery (handles local dev and Docker context)
+_base_dir = os.path.dirname(__file__)
+_paths_to_check = [
+    os.path.abspath(os.path.join(_base_dir, '../../')), # Local dev (parent of common)
+    os.path.abspath(os.path.join(_base_dir, '../')),     # Docker (parent of common)
+]
+for _p in _paths_to_check:
+    if os.path.exists(os.path.join(_p, 'common')):
+        sys.path.append(_p)
+        break
+
+from common.auth.middleware import get_auth_context, AuthContext, validate_auth_config, require_permission
+from common.auth.rbac import PERM_ALERT_INGEST
+from common.observability.metrics import MetricsMiddleware, get_metrics_response
+from common.observability.health import global_health_registry
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')

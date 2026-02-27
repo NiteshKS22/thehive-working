@@ -3,3 +3,6 @@ uvicorn
 opensearch-py
 psycopg2-binary
 pyjwt
+cryptography
+requests
+prometheus-client

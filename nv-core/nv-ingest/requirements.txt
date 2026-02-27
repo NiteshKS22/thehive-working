@@ -3,3 +3,6 @@ uvicorn
 pydantic
 kafka-python
 pyjwt
+cryptography
+requests
+prometheus-client

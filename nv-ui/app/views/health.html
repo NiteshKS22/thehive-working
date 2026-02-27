@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NeuralVyuha Prime - System Health</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .service { margin-bottom: 10px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .ok { background-color: #dff0d8; border-color: #d6e9c6; color: #3c763d; }
+        .error { background-color: #f2dede; border-color: #ebccd1; color: #a94442; }
+    </style>
+</head>
+<body>
+    <h1>System Health</h1>
+    <div id="dashboard"></div>
+    <script>
+        const services = [
+            { name: 'Ingest Service', url: 'http://localhost:8000/healthz' }, // Adjust URL for actual access if strictly split, but for demo:
+            // In a real browser environment, CORS or a proxy is needed.
+            // Assuming this is served on same domain via Nginx reverse proxy eventually or just a status page.
+            // For now, placeholders for visual acceptance.
+        ];
+
+        // Simple visual placeholder since real connectivity depends on networking context
+        document.getElementById('dashboard').innerHTML = '<p>Monitor health of microservices here.</p>';
+    </script>
+</body>
+</html>

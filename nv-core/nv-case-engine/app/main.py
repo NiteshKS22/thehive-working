@@ -301,3 +301,95 @@ def update_case(
 
 # ... (Other endpoints: tasks, notes, links - omitted for brevity, similar pattern)
 # For T2 scope, focus was on Case creation/update.
+
+@app.post("/cases/{case_id}/tasks", status_code=201)
+def create_task(
+    case_id: str,
+    req: CreateTaskRequest,
+    response: Response,
+    idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    auth: AuthContext = Depends(require_permission(PERM_CASE_WRITE))
+):
+    task_id = str(uuid.uuid4())
+    now = int(time.time() * 1000)
+    conn = get_db_conn()
+
+    try:
+        with conn.cursor() as cur:
+            cached = check_idempotency(cur, auth.tenant_id, idempotency_key)
+            if cached:
+                response.status_code = 200
+                return cached
+
+            # Simple tasks table schema assumption
+            cur.execute(
+                """
+                INSERT INTO tasks (tenant_id, task_id, case_id, title, status, created_by, assigned_to, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, 'WAITING', %s, %s, %s, %s)
+                """,
+                (auth.tenant_id, task_id, case_id, req.title, auth.user_id, req.assigned_to, now, now)
+            )
+
+            resp_body = {"task_id": task_id, "status": "created"}
+            save_idempotency(cur, auth.tenant_id, idempotency_key, resp_body)
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"DB Error: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
+    finally:
+        conn.close()
+
+    emit_event("nv.tasks.created.v1", "TaskCreated", {
+        "case_id": case_id,
+        "task_id": task_id,
+        "title": req.title
+    }, auth)
+
+    return resp_body
+
+@app.post("/tasks/{task_id}/logs", status_code=201)
+def create_task_log(
+    task_id: str,
+    req: CreateNoteRequest,
+    response: Response,
+    idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    auth: AuthContext = Depends(require_permission(PERM_CASE_WRITE))
+):
+    log_id = str(uuid.uuid4())
+    now = int(time.time() * 1000)
+    conn = get_db_conn()
+
+    try:
+        with conn.cursor() as cur:
+            cached = check_idempotency(cur, auth.tenant_id, idempotency_key)
+            if cached:
+                response.status_code = 200
+                return cached
+
+            cur.execute(
+                """
+                INSERT INTO task_logs (tenant_id, log_id, task_id, message, created_by, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (auth.tenant_id, log_id, task_id, req.body, auth.user_id, now)
+            )
+
+            resp_body = {"log_id": log_id, "status": "created"}
+            save_idempotency(cur, auth.tenant_id, idempotency_key, resp_body)
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"DB Error: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
+    finally:
+        conn.close()
+
+    emit_event("nv.logs.created.v1", "LogCreated", {
+        "task_id": task_id,
+        "log_id": log_id
+    }, auth)
+
+    return resp_body

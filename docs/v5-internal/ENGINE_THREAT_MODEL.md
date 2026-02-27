@@ -143,3 +143,21 @@ flowchart TD
 **Mitigation:**
 1.  **Same Origin/Proxy:** v5 API is exposed via same reverse proxy or internal routing.
 2.  **HTTPS:** Frontend only communicates over HTTPS.
+
+## Microservice Trust Boundary (Phase X1)
+
+### Context
+With the decommissioning of the monolithic v4 application, the trust boundary has shifted entirely to the inter-service communication layer within the .
+
+### Threats
+1. **Lateral Movement**: Compromise of one microservice (e.g., ) allowing unauthorized access to .
+2. **Data Exfiltration**: Direct access to  data stores (Postgres/OpenSearch) bypassing application logic.
+3. **Spoofing**: Rogue container masquerading as a legitimate service.
+
+### Mitigations
+1. **Mutual TLS (mTLS)**: All inter-service communication (gRPC/HTTP) MUST be encrypted and authenticated via mTLS. (Future roadmap item: Service Mesh implementation like Istio/Linkerd).
+2. **JWT Boundary**:
+   -  (Frontend) authenticates users via OIDC/Keycloak and receives a short-lived JWT.
+   - All backend services (, ) MUST validate the JWT signature and claims (RBAC) at the ingress point.
+   - Services do NOT trust "upstream" headers blindly; they verify the token.
+3. **Network Isolation**: The  Docker network is isolated. Only  (port 80) and  (port 8000) are exposed to the ingress controller. Database ports are internal-only.

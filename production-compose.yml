@@ -1,0 +1,143 @@
+version: '3.8'
+
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.3.6
+    container_name: nv-redpanda
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 1G
+      - --reserve-memory 0M
+      - --overprovisioned
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    ports:
+      - 9092:9092
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nv-mesh
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: nv-redis
+    ports:
+      - 6379:6379
+    volumes:
+      - redis-data:/data
+    networks:
+      - nv-mesh
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: nv-opensearch
+    environment:
+      - cluster.name=nv-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_SECURITY_PLUGIN=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - 9200:9200
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    networks:
+      - nv-mesh
+
+  postgres:
+    image: postgres:14-alpine
+    container_name: nv-postgres
+    environment:
+      - POSTGRES_USER=hive
+      - POSTGRES_PASSWORD=hive
+      - POSTGRES_DB=nv_vault
+    ports:
+      - 5432:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive -d nv_vault"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - nv-mesh
+
+  nv-ingest:
+    build: nv-core/nv-ingest
+    container_name: nv-ingest
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=redpanda:29092
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    networks:
+      - nv-mesh
+
+  nv-case-engine:
+    build: nv-core/nv-case-engine
+    container_name: nv-case-engine
+    ports:
+      - "8002:8000" # Mapped to 8002 to avoid conflict if running locally
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=redpanda:29092
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=hive
+      - POSTGRES_PASSWORD=hive
+      - POSTGRES_DB=nv_vault
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - nv-mesh
+
+  nv-query:
+    build: nv-core/nv-query
+    container_name: nv-query
+    ports:
+      - "8001:8001"
+    environment:
+      - POSTGRES_HOST=postgres
+      - OPENSEARCH_HOST=opensearch
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - nv-mesh
+
+  nv-ui:
+    build: nv-ui
+    container_name: nv-ui
+    ports:
+      - "80:80"
+    depends_on:
+      - nv-query
+      - nv-case-engine
+    networks:
+      - nv-mesh
+
+volumes:
+  redpanda-data:
+  redis-data:
+  opensearch-data:
+  postgres-data:
+
+networks:
+  nv-mesh:
+    driver: bridge

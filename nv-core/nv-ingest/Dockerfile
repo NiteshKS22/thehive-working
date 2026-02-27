@@ -2,10 +2,11 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY nv-ingest/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app/ ./app
+COPY nv-ingest/app/ ./app
+COPY common /app/common
 
 # Run as non-root
 RUN useradd -m ingestion && chown -R ingestion:ingestion /app

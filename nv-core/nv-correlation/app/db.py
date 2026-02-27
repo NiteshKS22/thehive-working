@@ -11,8 +11,8 @@ class Database:
         self.host = os.getenv("POSTGRES_HOST", "postgres")
         self.port = int(os.getenv("POSTGRES_PORT", 5432))
         self.db = os.getenv("POSTGRES_DB", "nv_vault")
-        self.user = os.getenv("POSTGRES_USER", "hive")
-        self.password = os.getenv("POSTGRES_PASSWORD", "hive")
+        self.user = os.getenv("POSTGRES_USER", "nv_user")
+        self.password = os.getenv("POSTGRES_PASSWORD", "nv_pass")
         self._connect()
 
     def _connect(self):

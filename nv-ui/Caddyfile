@@ -1,0 +1,25 @@
+:80 {
+    root * /srv
+    file_server
+
+    try_files {path} /index.html
+
+    @query_api {
+        path /api/*
+    }
+    reverse_proxy @query_api nv-query:8000
+
+    # Artifact service proxy — MinIO credentials never touch the browser
+    @artifact_api {
+        path /artifacts/*
+    }
+    reverse_proxy @artifact_api nv-artifact-service:8000
+
+    # WebSocket upgrade — tenant-isolated real-time stream
+    @websocket {
+        path /ws/*
+        header Connection *Upgrade*
+        header Upgrade    websocket
+    }
+    reverse_proxy @websocket nv-socket-service:8000
+}

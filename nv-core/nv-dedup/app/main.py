@@ -13,13 +13,22 @@ import redis
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# Mount Common Reliability
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../common')))
-from reliability.dlq import build_dlq_event, send_dlq
-from reliability.commit import commit_if_safe
-from reliability.retry import execute_with_retry
-from reliability.backpressure import check_backpressure
-from config.secrets import get_secret
+# Robust common library discovery (handles local dev and Docker context)
+_base_dir = os.path.dirname(__file__)
+_paths_to_check = [
+    os.path.abspath(os.path.join(_base_dir, '../../')), # Local dev (parent of common)
+    os.path.abspath(os.path.join(_base_dir, '../')),     # Docker (parent of common)
+]
+for _p in _paths_to_check:
+    if os.path.exists(os.path.join(_p, 'common')):
+        sys.path.append(_p)
+        break
+
+from common.reliability.dlq import build_dlq_event, send_dlq
+from common.reliability.commit import commit_if_safe
+from common.reliability.retry import execute_with_retry
+from common.reliability.backpressure import check_backpressure
+from common.config.secrets import get_secret
 
 # Metrics
 from metrics_server import start_metrics_server, MESSAGES_PROCESSED, DLQ_PUBLISHED, RETRIES_TOTAL, BACKPRESSURE_EVENTS, CONSUMER_LAG
@@ -39,9 +48,9 @@ METRICS_PORT = int(os.getenv("METRICS_PORT", 9001))
 
 # DB Config (ADR-034)
 POSTGRES_HOST = get_secret("POSTGRES_HOST", "postgres")
-POSTGRES_USER = get_secret("POSTGRES_USER", "hive")
-POSTGRES_PASSWORD = get_secret("POSTGRES_PASSWORD", "hive")
-POSTGRES_DB = get_secret("POSTGRES_DB", "thehive")
+POSTGRES_USER     = get_secret("POSTGRES_USER", "nv_user")
+POSTGRES_PASSWORD = get_secret("POSTGRES_PASSWORD", "nv_pass")
+POSTGRES_DB       = get_secret("POSTGRES_DB", "nv_vault")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 logger = logging.getLogger("dedup-worker")

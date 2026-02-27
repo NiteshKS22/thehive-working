@@ -1,0 +1,769 @@
+<!--
+  visual-vyuha.html — Phase E8.1: Visual Vyuha Attack Graph Canvas
+  NeuralVyuha Prime | Controller: NvVisualVyuhaCtrl
+  Guardrails: TENANT_PRIVACY | PERFORMANCE (canvas-based) | INTERACTIVITY (Quick-Triage)
+-->
+<!doctype html>
+<html ng-app="theHive">
+
+<head>
+    <meta charset="utf-8">
+    <title>Visual Vyuha — Attack Graph | NeuralVyuha</title>
+
+    <!-- Cytoscape.js — canvas renderer (handles 500+ nodes) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+    <!-- Cose-Bilkent auto-layout plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/cytoscape-cose-bilkent@4.1.0/cytoscape-cose-bilkent.js"></script>
+
+    <style>
+        /* ── Reset & Variables ───────────────────────────────────────── */
+        :root {
+            --bg-base: #0d0f14;
+            --bg-panel: #161922;
+            --bg-toolbar: #12151d;
+            --border: #252a38;
+            --accent-red: #e05c6a;
+            --accent-blue: #4a9eff;
+            --accent-green: #3ecf8e;
+            --accent-yellow: #f5c842;
+            --accent-purple: #9b77e8;
+            --text-main: #e2e8f0;
+            --text-muted: #718096;
+            --text-dim: #4a5568;
+            --panel-width: 380px;
+            --toolbar-h: 54px;
+            --radius: 8px;
+            --transition: 0.2s cubic-bezier(.4, 0, .2, 1);
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: var(--bg-base);
+            color: var(--text-main);
+            font-family: 'Inter', 'Roboto', system-ui, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Toolbar ──────────────────────────────────────────────────── */
+        .vv-toolbar {
+            height: var(--toolbar-h);
+            background: var(--bg-toolbar);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            gap: 12px;
+            flex-shrink: 0;
+            z-index: 100;
+        }
+
+        .vv-brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            font-size: 15px;
+            letter-spacing: .02em;
+            color: var(--text-main);
+            flex-shrink: 0;
+        }
+
+        .vv-brand .icon {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, var(--accent-red) 0%, var(--accent-purple) 100%);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .vv-sep {
+            width: 1px;
+            height: 24px;
+            background: var(--border);
+            flex-shrink: 0;
+        }
+
+        .vv-search {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0 12px;
+            height: 34px;
+            flex: 1;
+            max-width: 340px;
+            transition: border-color var(--transition);
+        }
+
+        .vv-search:focus-within {
+            border-color: var(--accent-blue);
+        }
+
+        .vv-search input {
+            background: none;
+            border: none;
+            outline: none;
+            color: var(--text-main);
+            font-size: 13px;
+            width: 100%;
+        }
+
+        .vv-search input::placeholder {
+            color: var(--text-dim);
+        }
+
+        .vv-search .search-icon {
+            color: var(--text-dim);
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+
+        .vv-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-main);
+            font-size: 12px;
+            font-weight: 500;
+            padding: 0 12px;
+            height: 32px;
+            cursor: pointer;
+            transition: background var(--transition), border-color var(--transition);
+            white-space: nowrap;
+        }
+
+        .vv-btn:hover {
+            background: #1e2436;
+            border-color: #3a4060;
+        }
+
+        .vv-btn.primary {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: #fff;
+        }
+
+        .vv-btn.primary:hover {
+            background: #3a8ee8;
+        }
+
+        .vv-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .vv-badge {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 20px;
+            letter-spacing: .03em;
+        }
+
+        .vv-badge.online {
+            background: rgba(62, 207, 142, .15);
+            color: var(--accent-green);
+        }
+
+        .vv-badge.offline {
+            background: rgba(224, 92, 106, .15);
+            color: var(--accent-red);
+        }
+
+        .vv-badge .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .vv-badge.online .dot {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .3;
+            }
+        }
+
+        .vv-spacer {
+            flex: 1;
+        }
+
+        .vv-stats {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .vv-stats strong {
+            color: var(--text-main);
+        }
+
+        /* ── Main Layout ──────────────────────────────────────────────── */
+        .vv-main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* ── Graph Canvas ─────────────────────────────────────────────── */
+        #nv-graph-container {
+            flex: 1;
+            background: var(--bg-base);
+            position: relative;
+        }
+
+        /* Loading overlay */
+        .vv-loading {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-base);
+            z-index: 10;
+            gap: 16px;
+            transition: opacity var(--transition);
+        }
+
+        .vv-loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .vv-spinner {
+            width: 42px;
+            height: 42px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .vv-loading p {
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        /* Empty state */
+        .vv-empty {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            pointer-events: none;
+        }
+
+        .vv-empty .glyph {
+            font-size: 48px;
+            opacity: .25;
+        }
+
+        .vv-empty p {
+            color: var(--text-dim);
+            font-size: 14px;
+            text-align: center;
+        }
+
+        /* Truncated warning banner */
+        .vv-truncated-banner {
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(245, 200, 66, .12);
+            border: 1px solid rgba(245, 200, 66, .35);
+            color: var(--accent-yellow);
+            border-radius: var(--radius);
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 500;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* ── Quick-Triage Drawer ──────────────────────────────────────── */
+        .vv-triage-panel {
+            width: var(--panel-width);
+            background: var(--bg-panel);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            transform: translateX(100%);
+            transition: transform var(--transition);
+            z-index: 50;
+            flex-shrink: 0;
+        }
+
+        .vv-triage-panel.open {
+            transform: translateX(0);
+        }
+
+        .vv-triage-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .vv-triage-header h3 {
+            font-size: 14px;
+            font-weight: 600;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .vv-node-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+
+        .vv-node-badge.case {
+            background: rgba(224, 92, 106, .18);
+            color: var(--accent-red);
+        }
+
+        .vv-node-badge.ip,
+        .vv-node-badge.domain {
+            background: rgba(74, 158, 255, .18);
+            color: var(--accent-blue);
+        }
+
+        .vv-node-badge.hash,
+        .vv-node-badge.file {
+            background: rgba(62, 207, 142, .18);
+            color: var(--accent-green);
+        }
+
+        .vv-node-badge.user {
+            background: rgba(245, 200, 66, .18);
+            color: var(--accent-yellow);
+        }
+
+        .vv-node-badge.cross_tenant {
+            background: rgba(155, 119, 232, .18);
+            color: var(--accent-purple);
+        }
+
+        .vv-close-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            padding: 2px;
+            transition: color var(--transition);
+        }
+
+        .vv-close-btn:hover {
+            color: var(--text-main);
+        }
+
+        .vv-triage-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 20px;
+        }
+
+        .vv-triage-body::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .vv-triage-body::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .vv-triage-body::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 2px;
+        }
+
+        .vv-kv-grid {
+            display: grid;
+            grid-template-columns: 100px 1fr;
+            gap: 6px 12px;
+            margin-bottom: 20px;
+        }
+
+        .vv-kv-grid .key {
+            font-size: 11px;
+            color: var(--text-muted);
+            align-self: center;
+        }
+
+        .vv-kv-grid .val {
+            font-size: 13px;
+            color: var(--text-main);
+            word-break: break-all;
+        }
+
+        .vv-section-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--text-dim);
+            margin: 16px 0 8px;
+        }
+
+        /* Timeline within triage panel */
+        .vv-timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .vv-tl-item {
+            display: flex;
+            gap: 10px;
+            background: var(--bg-base);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px 12px;
+        }
+
+        .vv-tl-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+
+        .vv-tl-icon.task {
+            background: rgba(74, 158, 255, .18);
+        }
+
+        .vv-tl-icon.note {
+            background: rgba(62, 207, 142, .18);
+        }
+
+        .vv-tl-icon.link {
+            background: rgba(155, 119, 232, .18);
+        }
+
+        .vv-tl-text {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .vv-tl-text .tl-title {
+            font-size: 12px;
+            color: var(--text-main);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .vv-tl-text .tl-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .vv-loading-inline {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
+            padding: 8px 0;
+        }
+
+        .vv-mini-spin {
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        /* Open-in-full link */
+        .vv-open-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--accent-blue);
+            text-decoration: none;
+            margin-top: 14px;
+            padding: 6px 0;
+            border-top: 1px solid var(--border);
+            width: 100%;
+        }
+
+        .vv-open-link:hover {
+            color: #72b8ff;
+        }
+
+        /* ── Legend ───────────────────────────────────────────────────── */
+        .vv-legend {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            background: rgba(22, 25, 34, .85);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 10px 14px;
+            display: flex;
+            gap: 14px;
+            z-index: 5;
+        }
+
+        .vv-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .vv-legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+
+<body ng-controller="NvVisualVyuhaCtrl as vm">
+
+    <!-- ── Toolbar ── -->
+    <div class="vv-toolbar">
+        <div class="vv-brand">
+            <div class="icon">⬡</div>
+            Visual Vyuha
+        </div>
+
+        <div class="vv-sep"></div>
+
+        <!-- Case ID search -->
+        <div class="vv-search">
+            <span class="search-icon">⌕</span>
+            <input id="vv-case-input" type="text" placeholder="Enter Case ID…" ng-model="vm.caseIdInput"
+                ng-keyup="$event.keyCode === 13 && vm.loadGraph()" autocomplete="off" />
+        </div>
+
+        <button id="vv-load-btn" class="vv-btn primary" ng-click="vm.loadGraph()"
+            ng-disabled="vm.loading || !vm.caseIdInput">
+            Load Graph
+        </button>
+
+        <div class="vv-sep"></div>
+
+        <button id="vv-layout-btn" class="vv-btn" ng-click="vm.runLayout()" ng-disabled="!vm.graphLoaded">
+            ⟳ Re-layout
+        </button>
+
+        <button id="vv-fit-btn" class="vv-btn" ng-click="vm.fitAll()" ng-disabled="!vm.graphLoaded">
+            ⊞ Fit All
+        </button>
+
+        <div class="vv-spacer"></div>
+
+        <!-- Stats -->
+        <div class="vv-stats" ng-if="vm.graphLoaded">
+            <span><strong>{{vm.nodeCount}}</strong> nodes</span>
+            <span><strong>{{vm.edgeCount}}</strong> edges</span>
+        </div>
+
+        <!-- Live indicator -->
+        <div class="vv-badge" ng-class="vm.liveConnected ? 'online' : 'offline'">
+            <span class="dot"></span>
+            {{vm.liveConnected ? 'Live' : 'Offline'}}
+        </div>
+    </div>
+
+    <!-- ── Main Area ── -->
+    <div class="vv-main">
+
+        <!-- Graph canvas -->
+        <div id="nv-graph-container">
+
+            <!-- Loading overlay -->
+            <div class="vv-loading" ng-class="{hidden: !vm.loading}" aria-live="polite">
+                <div class="vv-spinner"></div>
+                <p>Building attack graph…</p>
+            </div>
+
+            <!-- Empty / prompt state -->
+            <div class="vv-empty" ng-if="!vm.loading && !vm.graphLoaded">
+                <div class="glyph">⬡</div>
+                <p>Enter a Case ID above to visualize<br>its attack graph and lateral connections.</p>
+            </div>
+
+            <!-- 500-node truncation warning -->
+            <div class="vv-truncated-banner" ng-if="vm.truncated">
+                ⚠ Graph truncated at 500 nodes for performance. Zoom in to explore sub-clusters.
+            </div>
+
+            <!-- Legend -->
+            <div class="vv-legend" ng-if="vm.graphLoaded">
+                <div class="vv-legend-item">
+                    <div class="vv-legend-dot" style="background: #e05c6a"></div> Case
+                </div>
+                <div class="vv-legend-item">
+                    <div class="vv-legend-dot" style="background: #4a9eff"></div> IP / Domain
+                </div>
+                <div class="vv-legend-item">
+                    <div class="vv-legend-dot" style="background: #3ecf8e"></div> File / Hash
+                </div>
+                <div class="vv-legend-item">
+                    <div class="vv-legend-dot" style="background: #f5c842"></div> User
+                </div>
+                <div class="vv-legend-item">
+                    <div class="vv-legend-dot" style="background: #9b77e8"></div> Cross-Tenant
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Quick-Triage Drawer ── -->
+        <div class="vv-triage-panel" ng-class="{open: vm.selected}" id="vv-triage-panel">
+            <div class="vv-triage-header" ng-if="vm.selected">
+                <span class="vv-node-badge {{vm.selected.node_type}}">{{vm.selected.node_type}}</span>
+                <h3 title="{{vm.selected.label}}">{{vm.selected.label}}</h3>
+                <button class="vv-close-btn" ng-click="vm.closePanel()" title="Close">✕</button>
+            </div>
+
+            <div class="vv-triage-body" ng-if="vm.selected">
+
+                <!-- Cross-tenant anonymized node -->
+                <div ng-if="vm.selected.node_type === 'cross_tenant'">
+                    <div style="text-align:center;padding:24px 0;">
+                        <div style="font-size:32px;opacity:.4">🔒</div>
+                        <p style="color:var(--text-muted);font-size:13px;margin-top:8px;">
+                            This entity exists in another tenant.<br>
+                            Details are anonymized per privacy policy.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Case node detail -->
+                <div ng-if="vm.selected.node_type === 'case'">
+                    <div class="vv-kv-grid" ng-if="vm.selectedDetail">
+                        <span class="key">ID</span>
+                        <span class="val">{{vm.selected.id}}</span>
+                        <span class="key">Status</span>
+                        <span class="val">{{vm.selectedDetail.status || vm.selected.status}}</span>
+                        <span class="key">Severity</span>
+                        <span class="val">{{vm.selectedDetail.severity || vm.selected.severity}}</span>
+                        <span class="key">Assigned</span>
+                        <span class="val">{{vm.selectedDetail.assigned_to || '—'}}</span>
+                    </div>
+                    <div class="vv-loading-inline" ng-if="vm.triageLoading">
+                        <div class="vv-mini-spin"></div> Loading details…
+                    </div>
+
+                    <p class="vv-section-label">Incident Timeline</p>
+                    <div class="vv-timeline" ng-if="vm.selectedTimeline.length">
+                        <div class="vv-tl-item" ng-repeat="ev in vm.selectedTimeline | limitTo:8">
+                            <div class="vv-tl-icon {{ev.type}}">
+                                <span ng-if="ev.type === 'task'">✓</span>
+                                <span ng-if="ev.type === 'note'">✎</span>
+                                <span ng-if="ev.type === 'link'">⇐</span>
+                            </div>
+                            <div class="vv-tl-text">
+                                <div class="tl-title">{{ev.title || ev.body || ('Alert: ' + ev.alert_id)}}</div>
+                                <div class="tl-meta">{{ev.user}} · {{ev.ts | date:'short'}}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <p style="color:var(--text-muted);font-size:12px;margin-top:8px"
+                        ng-if="!vm.triageLoading && !vm.selectedTimeline.length">
+                        No timeline entries yet.
+                    </p>
+
+                    <a ng-href="#!/cases/{{vm.selected.id}}" class="vv-open-link" target="_self">
+                        Open full case ↗
+                    </a>
+                </div>
+
+                <!-- Observable node detail -->
+                <div ng-if="vm.selected.node_type !== 'case' && vm.selected.node_type !== 'cross_tenant'">
+                    <div class="vv-kv-grid">
+                        <span class="key">Type</span>
+                        <span class="val">{{vm.selected.node_type}}</span>
+                        <span class="key">Value</span>
+                        <span class="val">{{vm.selected.label}}</span>
+                        <span class="key">Seen in</span>
+                        <span class="val">{{vm.selectedNeighbourCount}} case(s)</span>
+                    </div>
+                    <p class="vv-section-label">Connected Cases</p>
+                    <div class="vv-timeline">
+                        <div class="vv-tl-item" ng-repeat="n in vm.selectedNeighbours"
+                            ng-click="vm.selectNodeById(n.id)" style="cursor:pointer">
+                            <div class="vv-tl-icon task">⬡</div>
+                            <div class="vv-tl-text">
+                                <div class="tl-title">{{n.label}}</div>
+                                <div class="tl-meta">{{n.node_type}}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /.vv-main -->
+
+</body>
+
+</html>

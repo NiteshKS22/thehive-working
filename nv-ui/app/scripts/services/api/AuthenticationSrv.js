@@ -1,53 +1,65 @@
-(function() {
+(function () {
     'use strict';
     angular
         .module('theHiveServices')
-        .factory('AuthenticationSrv', function($http, $q, UtilsSrv, SecuritySrv, UserSrv) {
+        .factory('AuthenticationSrv', function ($http, $q, UtilsSrv, SecuritySrv, UserSrv) {
             var self = {
                 currentUser: null,
                 homeState: null,
-                login: function(username, password, code) {
+                login: function (username, password, code) {
                     var post = {
                         user: username,
                         password: password
                     };
 
-                    if(code) {
+                    if (code) {
                         post.code = code;
                     }
 
-                    return $http.post('./api/login', post);
+                    return $http.post('./api/login', post).then(function (res) {
+                        if (res.data && res.data.token) {
+                            localStorage.setItem('nv_token', res.data.token);
+                        }
+                        return res;
+                    });
                 },
-                logout: function(success, failure) {
+                logout: function (success, failure) {
+                    localStorage.removeItem('nv_token');
                     $http
                         .post('./api/v1/logout')
-                        .then(function(data, status, headers, config) {
+                        .then(function (data, status, headers, config) {
                             self.currentUser = null;
 
                             if (angular.isFunction(success)) {
                                 success(data, status, headers, config);
                             }
                         })
-                        .catch(function(data, status, headers, config) {
+                        .catch(function (data, status, headers, config) {
                             if (angular.isFunction(failure)) {
                                 failure(data, status, headers, config);
                             }
                         });
                 },
-                current: function(organisation) {
+                current: function (organisation) {
                     var result = {};
 
-                    var options = {};
-                    if(organisation) {
-                        options.headers = {
-                            'X-Organisation': organisation
-                        };
+                    var options = { headers: {} };
+                    if (organisation) {
+                        options.headers['X-Organisation'] = organisation;
+                    }
+
+                    var token = localStorage.getItem('nv_token');
+                    if (token) {
+                        options.headers.Authorization = 'Bearer ' + token;
                     }
 
                     return $http
                         .get('./api/v1/user/current', options)
-                        .then(function(response) {
+                        .then(function (response) {
                             var userData = response.data;
+                            if (token) {
+                                userData.token = token;
+                            }
 
                             self.currentUser = userData;
                             self.currentUser.homeState = self.getHomePage();
@@ -57,40 +69,40 @@
 
                             return $q.resolve(result);
                         })
-                        .catch(function(err) {
+                        .catch(function (err) {
                             self.currentUser = null;
                             return $q.reject(err);
                         });
                 },
-                isSuperAdmin: function() {
+                isSuperAdmin: function () {
                     var user = self.currentUser;
 
                     return user && user.organisation === 'admin';
                 },
-                getHomePage: function() {
-                    if(self.isSuperAdmin()) {
-                        if(self.hasPermission('manageOrganisation')) {
+                getHomePage: function () {
+                    if (self.isSuperAdmin()) {
+                        if (self.hasPermission('manageOrganisation')) {
                             return 'app.administration.organisations';
-                        } else if(self.hasPermission('manageProfile')) {
+                        } else if (self.hasPermission('manageProfile')) {
                             return 'app.administration.profiles';
                         } else if (self.hasPermission('manageCustomField')) {
                             return 'app.administration.custom-fields';
-                        } else if(self.hasPermission('manageAnalyzerTemplate')) {
+                        } else if (self.hasPermission('manageAnalyzerTemplate')) {
                             return 'app.administration.analyzer-templates';
-                        } else if(self.hasPermission('manageObservableTemplate')) {
+                        } else if (self.hasPermission('manageObservableTemplate')) {
                             return 'app.administration.observables';
-                        } else if(self.hasPermission('managePlatform')) {
+                        } else if (self.hasPermission('managePlatform')) {
                             return 'app.administration.platform';
-                        } else if(self.hasPermission('manageTaxonomy')) {
+                        } else if (self.hasPermission('manageTaxonomy')) {
                             return 'app.administration.taxonomies';
-                        } else if(self.hasPermission('managePattern')) {
+                        } else if (self.hasPermission('managePattern')) {
                             return 'app.administration.attackPatterns';
                         }
                     } else {
-                        return 'app.cases';
+                        return 'app.index';
                     }
                 },
-                hasPermission: function(permissions) {
+                hasPermission: function (permissions) {
                     var user = self.currentUser;
 
                     if (!user) {

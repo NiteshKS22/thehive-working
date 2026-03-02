@@ -1,12 +1,18 @@
 /**
  * Controller for login modal page2
  */
-(function() {
+(function () {
     'use strict';
     angular.module('theHiveControllers')
-        .controller('AuthenticationCtrl', function($rootScope, $scope, $state, $location, $uibModalStack, $stateParams, AuthenticationSrv, NotificationSrv, UtilsSrv, UrlParser, appConfig) {
+        .controller('AuthenticationCtrl', function ($rootScope, $scope, $state, $location, $uibModalStack, $stateParams, AuthenticationSrv, NotificationSrv, UtilsSrv, appConfig) {
             $scope.appConfig = appConfig;
-            $scope.version = appConfig.versions.TheHive;
+
+            // Safeguard against missing versions block in payload
+            if (appConfig && appConfig.versions && appConfig.versions.TheHive) {
+                $scope.version = appConfig.versions.TheHive;
+            } else {
+                $scope.version = 'NeuralVyuha';
+            }
 
             $scope.params = {
                 requireMfa: false
@@ -14,22 +20,26 @@
 
             $uibModalStack.dismissAll();
 
-            $scope.ssoEnabled = function() {
-                return appConfig.config.authType.indexOf("oauth2") !== -1;
+            $scope.ssoEnabled = function () {
+                return appConfig && appConfig.config && appConfig.config.authType && appConfig.config.authType.indexOf("oauth2") !== -1;
             };
 
 
-            $scope.login = function() {
+            $scope.login = function () {
                 $scope.params.username = $scope.params.username.toLowerCase();
                 AuthenticationSrv.login($scope.params.username, $scope.params.password, $scope.params.mfaCode)
-                    .then(function() {
-                        $location.search('error', null);
-                        $state.go('app.index');
+                    .then(function () {
+                        // Populate currentUser and homeState before navigating
+                        return AuthenticationSrv.current();
                     })
-                    .catch(function(err) {
+                    .then(function () {
+                        $location.search('error', null);
+                        $state.go(AuthenticationSrv.currentUser.homeState || 'app.index');
+                    })
+                    .catch(function (err) {
                         if (err.status === 520) {
                             NotificationSrv.error('AuthenticationCtrl', err.data.message, err.status);
-                        } else if(err.status === 402){
+                        } else if (err.status === 402) {
                             $scope.params.requireMfa = true;
                         } else {
                             NotificationSrv.log(err.data.message, 'error');
@@ -37,8 +47,8 @@
                     });
             };
 
-            var error = UtilsSrv.extractQueryParam('error', UrlParser('query', $location.absUrl()));
-            if(!_.isEmpty(error)) {
+            var error = $location.search().error;
+            if (!_.isEmpty(error)) {
                 $scope.ssoError = window.decodeURIComponent(error).replace(/\+/gi, ' ', '');
             }
         });

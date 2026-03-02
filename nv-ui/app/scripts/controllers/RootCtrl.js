@@ -54,62 +54,14 @@ angular.module('theHiveControllers').controller('RootCtrl',
             $scope.templates = templates;
         });
 
-        StreamQuerySrv('v1', [
-            { _name: 'myTasks' },
-            {
-                _name: 'filter',
-                _in: {
-                    _field: 'status',
-                    _values: ['Waiting', 'InProgress']
-                }
-            },
-            { _name: 'count' }
-        ], {
-            scope: $scope,
-            rootId: 'any',
-            objectType: 'case_task',
-            query: {
-                params: {
-                    name: 'my-tasks.stats'
-                }
-            },
-            onUpdate: function (data) {
-                $scope.myCurrentTasksCount = data;
-            }
-        });
+        // StreamQuerySrv usage removed because NeuralVyuha nv-query backend
+        // does not support TheHive's obsolete /api/v1/query for task stats.
+        $scope.myCurrentTasksCount = 0;
+        $scope.waitingTasksCount = 0;
 
-        StreamQuerySrv('v1', [
-            { _name: 'waitingTasks' },
-            { _name: 'count' }
-        ], {
-            scope: $scope,
-            rootId: 'any',
-            objectType: 'case_task',
-            query: {
-                params: {
-                    name: 'waiting-tasks.stats'
-                }
-            },
-            onUpdate: function (data) {
-                $scope.waitingTasksCount = data;
-            }
-        });
-
-        StreamQuerySrv('v1', [
-            { _name: 'countUnreadAlert' },
-        ], {
-            scope: $scope,
-            rootId: 'any',
-            objectType: 'alert',
-            query: {
-                params: {
-                    name: 'unread-alert-count'
-                }
-            },
-            onUpdate: function (data) {
-                $scope.unreadAlertCount = data;
-            }
-        });
+        // Use NvApiSrv for total alerts (as a global approximation) instead of the old v1 query countUnreadAlert
+        // If NvApiSrv is not yet integrated fully at RootCtrl level, we'll keep it simple:
+        $scope.unreadAlertCount = 0;
 
         $scope.$on('templates:refresh', function () {
             CaseTemplateSrv.list().then(function (templates) {
@@ -136,9 +88,9 @@ angular.module('theHiveControllers').controller('RootCtrl',
         // });
 
         $scope.initCustomFieldsCache = function () {
-            CustomFieldsSrv.all().then(function (list) {
-                $scope.customFieldsCache = list;
-            });
+            // NeuralVyuha backend does not currently support /api/customField
+            // return CustomFieldsSrv.all().then(...)
+            $scope.customFieldsCache = [];
         };
         $scope.initCustomFieldsCache();
 

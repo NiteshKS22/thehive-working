@@ -1,19 +1,18 @@
 :80 {
-    root * /srv
-    file_server
-
-    try_files {path} /index.html
-
-    @query_api {
-        path /api/*
+    # API proxy — strip /api prefix before forwarding to nv-query
+    handle_path /api/* {
+        reverse_proxy nv-query:8000
     }
-    reverse_proxy @query_api nv-query:8000
 
     # Artifact service proxy — MinIO credentials never touch the browser
-    @artifact_api {
-        path /artifacts/*
+    handle_path /artifacts/* {
+        reverse_proxy nv-artifact-service:8000
     }
-    reverse_proxy @artifact_api nv-artifact-service:8000
+
+    # Node service proxy — Integration Hub (Cortex / MISP node management)
+    handle_path /node-service/* {
+        reverse_proxy nv-node-service:8085
+    }
 
     # WebSocket upgrade — tenant-isolated real-time stream
     @websocket {
@@ -22,4 +21,37 @@
         header Upgrade    websocket
     }
     reverse_proxy @websocket nv-socket-service:8000
+
+    # Serve static asset directories directly, NO SPA fallback
+    handle /bower_components/* {
+        root * /srv
+        file_server
+    }
+    handle /scripts/* {
+        root * /srv
+        file_server
+    }
+    handle /styles/* {
+        root * /srv
+        file_server
+    }
+    handle /fonts/* {
+        root * /srv
+        file_server
+    }
+    handle /images/* {
+        root * /srv
+        file_server
+    }
+    handle /views/* {
+        root * /srv
+        file_server
+    }
+
+    # SPA fallback for all other requests
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
 }

@@ -1,239 +1,79 @@
-(function () {
-    'use strict';
+'use strict';
 
-    /**
-     * nvSocketSrv — Vyuha-Stream WebSocket Client
-     *
-     * Maintains a persistent, authenticated WebSocket connection to nv-socket-service.
-     * Broadcasts Angular events when messages arrive so controllers can react.
-     *
-     * GUARDRAILS IMPLEMENTED:
-     *  - TENANT_ISOLATION  : token contains tenant_id; server enforces matching path
-     *  - GRACEFUL_DEGRADE  : on disconnect, switches to 30s polling + shows offline badge
-     *  - MINIMAL_PAYLOAD   : receives {type, id, tenant_id, timestamp}; UI fetches details
-     */
-    angular.module('theHiveServices').factory('NvSocketSrv', function (
-        $rootScope, $interval, $timeout, NvConfig, AuthenticationSrv, NotificationSrv
-    ) {
+angular.module('theHiveServices').factory('nvSocketSrv', function ($rootScope, $window, AuthenticationSrv, NotificationSrv) {
+    var service = {};
+    var socket = null;
+    var reconnectTimer = null;
 
-        var SOCKET_URL = NvConfig.nvSocketUrl || (window.location.origin.replace(/^http/, 'ws') + '/ws');
-        var POLL_INTERVAL = 30000;   // 30s fallback polling
-        var RECONNECT_STEPS = [1000, 2000, 4000, 8000, 30000]; // exponential backoff caps
-        var HIGH_SEV_MIN = 3;        // Severity >= 3 triggers toast
+    service.connect = function () {
+        if (socket) return;
 
-        var svc = {
-            connected: false,
-            offline: false,
-            presence: {},            // {case_id: [user_id, ...]}
-        };
-
-        var _ws = null;
-        var _pollTimer = null;
-        var _reconnectTimer = null;
-        var _reconnectStep = 0;
-        var _currentCaseId = null;
-
-        // ── Token helper ─────────────────────────────────────────────────────
-        function _getToken() {
-            return AuthenticationSrv.currentUser && AuthenticationSrv.currentUser.token;
+        if (!AuthenticationSrv.currentUser || !AuthenticationSrv.currentUser.token) {
+            console.warn('Cannot connect to Vyuha-Stream: No authenticated user token.');
+            return;
         }
 
-        function _getTenantId() {
-            return AuthenticationSrv.currentUser && AuthenticationSrv.currentUser.organisation;
-        }
+        var tenantId = AuthenticationSrv.currentUser.tenant_id || AuthenticationSrv.currentUser.organisation || 'admin';
+        var token = AuthenticationSrv.currentUser.token;
 
-        // ── Dispatch incoming events ─────────────────────────────────────────
-        function _dispatch(msg) {
-            switch (msg.type) {
-                case 'PING':
-                    if (_ws && _ws.readyState === WebSocket.OPEN) {
-                        _ws.send(JSON.stringify({ type: 'PONG' }));
-                    }
-                    break;
+        var protocol = $window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        var wsUrl = protocol + '//' + $window.location.host + '/ws/' + tenantId + '?token=' + token;
 
-                case 'NEW_ALERT':
-                    $rootScope.$broadcast('nv:alert:new', { id: msg.id });
-                    // Toast on high-severity — UI fetches severity via nv-query after getting id
-                    NotificationSrv.log(
-                        '🔴 New Alert',
-                        'A new alert has arrived. <a href="/#!/alerts/' + msg.id + '">View</a>',
-                        'warning'
-                    );
-                    break;
+        console.log('Connecting to Vyuha-Stream at ' + wsUrl + '...');
 
-                case 'CASE_UPDATED':
-                    $rootScope.$broadcast('nv:case:updated', { id: msg.id });
-                    break;
+        try {
+            socket = new WebSocket(wsUrl);
 
-                case 'ARTIFACT_UPLOADED':
-                    $rootScope.$broadcast('nv:evidence:refresh', { id: msg.id });
-                    break;
-
-                case 'ANALYST_PRESENCE':
-                    svc.presence[msg.id] = msg.analysts || [];
-                    $rootScope.$broadcast('nv:presence:updated', { case_id: msg.id, analysts: svc.presence[msg.id] });
-                    $rootScope.$apply();
-                    break;
-
-                // Phase E8.1 — Visual Vyuha: real-time sighting edge
-                // Payload: { type: 'SIGHTING', source_case_id, target_case_id, observable_id, tenant_id, timestamp }
-                case 'SIGHTING':
-                    $rootScope.$broadcast('nv:graph:sighting', {
-                        source_case_id: msg.source_case_id,
-                        target_case_id: msg.target_case_id,
-                        observable_id: msg.observable_id
-                    });
-                    break;
-
-                // Phase Z2.1 — Node Manager: live integration node health push
-                // Payload: { type: 'NODE_STATUS_CHANGED', node_id, status, latency_ms, timestamp }
-                case 'NODE_STATUS_CHANGED':
-                    $rootScope.$broadcast('nv:node:statusChanged', {
-                        node_id: msg.node_id,
-                        status: msg.status,
-                        latency_ms: msg.latency_ms,
-                        timestamp: msg.timestamp
-                    });
-                    break;
-
-                case 'CONNECTED':
-                    // Server confirmed connection
-                    break;
-
-                default:
-                    break;
-            }
-        }
-
-        // ── Start polling fallback ───────────────────────────────────────────
-        function _startPolling() {
-            if (_pollTimer) return;
-            _pollTimer = $interval(function () {
-                $rootScope.$broadcast('nv:poll:tick');
-            }, POLL_INTERVAL);
-        }
-
-        function _stopPolling() {
-            if (_pollTimer) {
-                $interval.cancel(_pollTimer);
-                _pollTimer = null;
-            }
-        }
-
-        // ── Set online / offline state ───────────────────────────────────────
-        function _setOnline() {
-            svc.connected = true;
-            svc.offline = false;
-            _reconnectStep = 0;
-            _stopPolling();
-            $rootScope.$broadcast('nv:socket:online');
-            $rootScope.$apply();
-        }
-
-        function _setOffline() {
-            svc.connected = false;
-            svc.offline = true;
-            _startPolling();
-            $rootScope.$broadcast('nv:socket:offline');
-            $rootScope.$apply();
-        }
-
-        // ── Reconnect with backoff ───────────────────────────────────────────
-        function _scheduleReconnect() {
-            if (_reconnectTimer) return;
-            var delay = RECONNECT_STEPS[Math.min(_reconnectStep, RECONNECT_STEPS.length - 1)];
-            _reconnectStep++;
-            _reconnectTimer = $timeout(function () {
-                _reconnectTimer = null;
-                svc.connect();
-            }, delay);
-        }
-
-        // ── Core connect ─────────────────────────────────────────────────────
-        svc.connect = function () {
-            var token = _getToken();
-            var tenantId = _getTenantId();
-            if (!token || !tenantId) {
-                // Not authenticated yet — try after auth
-                return;
-            }
-
-            var url = SOCKET_URL + '/' + encodeURIComponent(tenantId) + '?token=' + encodeURIComponent(token);
-
-            try {
-                _ws = new WebSocket(url);
-            } catch (e) {
-                _setOffline();
-                _scheduleReconnect();
-                return;
-            }
-
-            _ws.onopen = function () {
-                _setOnline();
-                // Re-join current case room if one is open
-                if (_currentCaseId) {
-                    svc.joinCase(_currentCaseId);
+            socket.onopen = function () {
+                console.log('Vyuha-Stream connected (Tenant: ' + tenantId + ').');
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = null;
                 }
             };
 
-            _ws.onmessage = function (event) {
-                try {
-                    var msg = JSON.parse(event.data);
-                    $rootScope.$apply(function () { _dispatch(msg); });
-                } catch (e) {
-                    console.warn('NvSocketSrv: unparseable message', event.data);
+            socket.onmessage = function (event) {
+                var msg = JSON.parse(event.data);
+
+                // Handle Heartbeat
+                if (msg.type === 'PING') {
+                    socket.send(JSON.stringify({ type: 'PONG', timestamp: Date.now() }));
+                } else if (msg.type === 'CONNECTED') {
+                    // Connection acknowledged by backend
+                } else {
+                    // Broadcast real-time security events to Angular controllers globally
+                    $rootScope.$broadcast('vyuha-stream-event', msg);
                 }
             };
 
-            _ws.onclose = function () {
-                _setOffline();
-                _scheduleReconnect();
+            socket.onclose = function (event) {
+                console.log('Vyuha-Stream disconnected. Reconnecting in 5s...');
+                socket = null;
+                reconnectTimer = setTimeout(function () {
+                    service.connect();
+                }, 5000);
             };
 
-            _ws.onerror = function () {
-                // onclose will follow immediately
+            socket.onerror = function (err) {
+                console.error('Vyuha-Stream Connection Error');
             };
-        };
+        } catch (e) {
+            console.error('WebSocket creation failed', e);
+        }
+    };
 
-        // ── Presence: join / leave ────────────────────────────────────────────
-        svc.joinCase = function (caseId) {
-            _currentCaseId = caseId;
-            if (_ws && _ws.readyState === WebSocket.OPEN) {
-                _ws.send(JSON.stringify({ type: 'JOIN_CASE', case_id: caseId }));
-            }
-        };
+    service.disconnect = function () {
+        if (socket) {
+            socket.onclose = function () { }; // prevent auto-reconnect
+            socket.close();
+            socket = null;
+            console.log('Disconnected from Vyuha-Stream.');
+        }
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+    };
 
-        svc.leaveCase = function (caseId) {
-            if (caseId === _currentCaseId) {
-                _currentCaseId = null;
-            }
-            if (_ws && _ws.readyState === WebSocket.OPEN) {
-                _ws.send(JSON.stringify({ type: 'LEAVE_CASE', case_id: caseId }));
-            }
-        };
-
-        // ── Disconnect ───────────────────────────────────────────────────────
-        svc.disconnect = function () {
-            if (_ws) {
-                _ws.close();
-                _ws = null;
-            }
-            if (_reconnectTimer) {
-                $timeout.cancel(_reconnectTimer);
-                _reconnectTimer = null;
-            }
-            _stopPolling();
-        };
-
-        // ── Auto-start when Angular is ready ─────────────────────────────────
-        $rootScope.$on('nv:auth:loggedIn', function () {
-            svc.connect();
-        });
-
-        $rootScope.$on('nv:auth:loggedOut', function () {
-            svc.disconnect();
-        });
-
-        return svc;
-    });
-})();
+    return service;
+});

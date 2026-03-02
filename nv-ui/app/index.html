@@ -50,6 +50,7 @@
   <link rel="stylesheet" href="styles/search.css" />
   <link rel="stylesheet" href="styles/filters.css" />
   <link rel="stylesheet" href="styles/dashboard.css" />
+  <link rel="stylesheet" href="styles/nv-dashboard.css" />
   <link rel="stylesheet" href="styles/case-item.css" />
   <link rel="stylesheet" href="styles/case-template.css" />
   <link rel="stylesheet" href="styles/procedure.css" />
@@ -164,7 +165,24 @@
   <script src="scripts/components/sharing/SharingModalCtrl.js"></script>
   <script src="scripts/components/sharing/task/SharingListCmp.js"></script>
   <script src="scripts/controllers/AboutCtrl.js"></script>
-
+  <script src="scripts/controllers/admin/AdminAnalyzerTemplatesCtrl.js"></script>
+  <script src="scripts/controllers/admin/AdminCustomFieldDialogCtrl.js"></script>
+  <script src="scripts/controllers/admin/AdminCustomFieldsCtrl.js"></script>
+  <script src="scripts/controllers/admin/AdminObservablesCtrl.js"></script>
+  <script src="scripts/controllers/admin/AdminUiSettingsCtrl.js"></script>
+  <script src="scripts/controllers/admin/attack/AttackPatternListCtrl.js"></script>
+  <script src="scripts/controllers/admin/organisation/case-template/AdminCaseTemplateImportCtrl.js"></script>
+  <script src="scripts/controllers/admin/organisation/case-template/AdminCaseTemplateTasksCtrl.js"></script>
+  <script src="scripts/controllers/admin/organisation/OrgDetailsCtrl.js"></script>
+  <script src="scripts/controllers/admin/organisation/OrgLinksModalCtrl.js"></script>
+  <script src="scripts/controllers/admin/organisation/OrgListCtrl.js"></script>
+  <script src="scripts/controllers/admin/organisation/OrgModalCtrl.js"></script>
+  <script src="scripts/controllers/admin/organisation/OrgUserModalCtrl.js"></script>
+  <script src="scripts/controllers/admin/organisation/OrgUsersCtrl.js"></script>
+  <script src="scripts/controllers/admin/platform/PlatformStatusCtrl.js"></script>
+  <script src="scripts/controllers/admin/profile/ProfileListCtrl.js"></script>
+  <script src="scripts/controllers/admin/profile/ProfileModalCtrl.js"></script>
+  <script src="scripts/controllers/admin/taxonomy/TaxonomyListCtrl.js"></script>
   <script src="scripts/controllers/alert/AlertEventCtrl.js"></script>
   <script src="scripts/controllers/alert/AlertListCtrl.js"></script>
   <script src="scripts/controllers/alert/AlertStatsCtrl.js"></script>
@@ -176,20 +194,24 @@
   <script src="scripts/controllers/case/CaseDetailsCtrl.js"></script>
   <script src="scripts/controllers/case/CaseExportDialogCtrl.js"></script>
   <script src="scripts/controllers/case/CaseLinksCtrl.js"></script>
+  <script src="scripts/controllers/case/CaseLinkAddModalCtrl.js"></script>
   <script src="scripts/controllers/case/CaseListCtrl.js"></script>
   <script src="scripts/controllers/case/CaseMainCtrl.js"></script>
   <script src="scripts/controllers/case/CaseMergeModalCtrl.js"></script>
   <script src="scripts/controllers/case/CaseObservablesCtrl.js"></script>
   <script src="scripts/controllers/case/CaseObservablesExportCtrl.js"></script>
   <script src="scripts/controllers/case/CaseObservablesItemCtrl.js"></script>
+  <script src="scripts/controllers/case/CasePagesCtrl.js"></script>
   <script src="scripts/controllers/case/CaseProceduresCtrl.js"></script>
   <script src="scripts/controllers/case/CaseReopenModalCtrl.js"></script>
   <script src="scripts/controllers/case/CaseSharingCtrl.js"></script>
   <script src="scripts/controllers/case/CaseStatsCtrl.js"></script>
   <script src="scripts/controllers/case/CaseTasksCtrl.js"></script>
   <script src="scripts/controllers/case/CaseTasksItemCtrl.js"></script>
+  <script src="scripts/controllers/case/CaseTtpsCtrl.js"></script>
   <script src="scripts/controllers/case/CaseTemplatesDialogCtrl.js"></script>
   <script src="scripts/controllers/case/CaseUpdateCtrl.js"></script>
+  <script src="scripts/controllers/case/EvidenceTabCtrl.js"></script>
   <script src="scripts/controllers/case/ObservableAnalyzeCtrl.js"></script>
   <script src="scripts/controllers/case/ObservableCreationCtrl.js"></script>
   <script src="scripts/controllers/case/ObservablesStatsCtrl.js"></script>
@@ -197,10 +219,25 @@
   <script src="scripts/controllers/case/procedure/AddProcedureModalCtrl.js"></script>
   <script src="scripts/controllers/case/share/CaseShareModalCtrl.js"></script>
   <script src="scripts/controllers/case/tasklogs/AddTaskLogModalCtrl.js"></script>
-  <!-- Phase Z1.1: Evidence Vault -->
-  <script src="scripts/controllers/case/EvidenceTabCtrl.js"></script>
-
+  <script src="scripts/controllers/cortex/CortexInstanceDialogCtrl.js"></script>
+  <script src="scripts/controllers/cortex/ResponderActionDialogCtrl.js"></script>
+  <script src="scripts/controllers/dashboard/DashboardsCtrl.js"></script>
+  <script src="scripts/controllers/dashboard/DashboardViewCtrl.js"></script>
+  <script src="scripts/controllers/LiveCtrl.js"></script>
+  <script src="scripts/controllers/MainPageCtrl.js"></script>
+  <script src="scripts/controllers/MigrationCtrl.js"></script>
+  <script src="scripts/controllers/misc/ResponderSelectorCtrl.js"></script>
+  <script src="scripts/controllers/misc/ServerInstanceDialogCtrl.js"></script>
   <script src="scripts/controllers/misc/TaxonomySelectionModalCtrl.js"></script>
+  <script src="scripts/controllers/nv/nvAdminCtrl.js"></script>
+  <script src="scripts/controllers/nv/nvAlertListController.js"></script>
+  <script src="scripts/controllers/nv/nvCaseListController.js"></script>
+  <script src="scripts/controllers/nv/nvGroupDetailController.js"></script>
+  <script src="scripts/controllers/nv/nvGroupListController.js"></script>
+  <script src="scripts/controllers/nv/nvHelpCtrl.js"></script>
+  <script src="scripts/controllers/nv/nvIntegrationsCtrl.js"></script>
+  <script src="scripts/controllers/nv/nvProfileCtrl.js"></script>
+  <script src="scripts/controllers/nv/nvVisualVyuhaCtrl.js"></script>
   <script src="scripts/controllers/RootCtrl.js"></script>
   <script src="scripts/controllers/SearchCtrl.js"></script>
   <script src="scripts/controllers/SettingsCtrl.js"></script>
@@ -278,18 +315,21 @@
   <script src="scripts/filters/tag-value.js"></script>
   <script src="scripts/filters/urlencode.js"></script>
   <script src="scripts/services/AnalyzerInfoSrv.js"></script>
-  <script src="scripts/services/nvConfig.js"></script>
-  <script src="scripts/services/nvRouter.js"></script>
-  <script src="scripts/services/nvApiSrv.js"></script>
-  <!-- Phase Z1.2: Vyuha-Stream real-time WebSocket -->
-  <script src="scripts/services/nvSocketSrv.js"></script>
-  <script src="scripts/controllers/nv/nvHelpCtrl.js"></script>
-  <script src="scripts/controllers/nv/nvGroupListController.js"></script>
-  <script src="scripts/controllers/nv/nvGroupDetailController.js"></script>
-  <script src="scripts/controllers/nv/nvIntegrationsCtrl.js"></script>
-
   <script src="scripts/services/api/AlertingSrv.js"></script>
-
+  <script src="scripts/services/api/AnalyzerSrv.js"></script>
+  <script src="scripts/services/api/AnalyzerTemplateSrv.js"></script>
+  <script src="scripts/services/api/AttackPatternSrv.js"></script>
+  <script src="scripts/services/api/AuditSrv.js"></script>
+  <script src="scripts/services/api/AuthenticationSrv.js"></script>
+  <script src="scripts/services/api/CaseSrv.js"></script>
+  <script src="scripts/services/api/CaseTaskSrv.js"></script>
+  <script src="scripts/services/api/CaseTemplateSrv.js"></script>
+  <script src="scripts/services/api/CortexSrv.js"></script>
+  <script src="scripts/services/api/CustomFieldsSrv.js"></script>
+  <script src="scripts/services/api/DashboardSrv.js"></script>
+  <script src="scripts/services/api/JobSrv.js"></script>
+  <script src="scripts/services/api/ListSrv.js"></script>
+  <script src="scripts/services/api/MispSrv.js"></script>
   <script src="scripts/services/api/ObservableTypeSrv.js"></script>
   <script src="scripts/services/api/OrganisationSrv.js"></script>
   <script src="scripts/services/api/PlatformSrv.js"></script>
@@ -323,6 +363,11 @@
   <script src="scripts/services/common/ui/NotificationSrv.js"></script>
   <script src="scripts/services/common/UtilsSrv.js"></script>
   <script src="scripts/services/EntitySrv.js"></script>
+  <script src="scripts/services/nvApiSrv.js"></script>
+  <script src="scripts/services/nvArtifactSrv.js"></script>
+  <script src="scripts/services/nvConfig.js"></script>
+  <script src="scripts/services/nvRouter.js"></script>
+  <script src="scripts/services/nvSocketSrv.js"></script>
   <script src="scripts/services/ui/AfkSrv.js"></script>
   <script src="scripts/services/ui/CaseTabsSrv.js"></script>
   <script src="scripts/services/ui/ChartSrv.js"></script>

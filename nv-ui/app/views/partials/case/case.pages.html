@@ -1,0 +1,78 @@
+<div class="case-pages">
+    <!-- Header Controls -->
+    <div class="row m-b-md">
+        <div class="col-md-12">
+            <div class="pull-right">
+                <button class="btn btn-primary btn-sm" ng-click="isEditing = !isEditing" ng-if="!isEditing">
+                    <i class="fa fa-plus"></i> Add Page
+                </button>
+                <button class="btn btn-default btn-sm" ng-click="isEditing = false" ng-if="isEditing">
+                    <i class="fa fa-times"></i> Cancel
+                </button>
+            </div>
+            <h3 class="m-t-none">Case Wiki Pages</h3>
+        </div>
+    </div>
+
+    <!-- Create Page Form -->
+    <div class="row" ng-if="isEditing">
+        <div class="col-md-12">
+            <div class="box box-primary">
+                <div class="box-header with-border">
+                    <h3 class="box-title">New Page</h3>
+                </div>
+                <div class="box-body">
+                    <div class="form-group">
+                        <label>Title</label>
+                        <input type="text" class="form-control" ng-model="newPage.title"
+                            placeholder="Page Title (e.g., Initial Discovery)">
+                    </div>
+                    <div class="form-group">
+                        <label>Content (Markdown)</label>
+                        <textarea class="form-control" name="content" rows="10" ng-model="newPage.content"
+                            required></textarea>
+                    </div>
+                </div>
+                <div class="box-footer">
+                    <button class="btn btn-success" ng-click="createPage()"
+                        ng-disabled="!newPage.title || !newPage.content">
+                        <i class="fa fa-save"></i> Save Page
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loader -->
+    <div class="text-center p-xl" ng-if="isLoading">
+        <i class="fa fa-spinner fa-spin fa-3x text-muted"></i>
+    </div>
+
+    <!-- Empty State -->
+    <div class="alert alert-info text-center" ng-if="!isLoading && pages.length === 0">
+        <h4>No pages yet!</h4>
+        <p>Use the "Add Page" button to create the first documentation page for this case.</p>
+    </div>
+
+    <!-- Pages List -->
+    <div class="row" ng-if="!isLoading && pages.length > 0">
+        <div class="col-md-12" ng-repeat="page in pages">
+            <div class="box box-solid box-default">
+                <div class="box-header with-border">
+                    <h3 class="box-title"><i class="fa fa-book text-muted"></i> {{page.title}}</h3>
+                    <div class="box-tools pull-right">
+                        <span class="text-muted small m-r-sm">
+                            <i class="fa fa-clock-o"></i> {{page.createdAt | date:'medium'}} by {{page.createdBy}}
+                        </span>
+                        <button class="btn btn-box-tool text-danger" ng-click="deletePage(page.id)" title="Delete Page">
+                            <i class="fa fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="box-body">
+                    <div marked="page.content" class="markdown"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

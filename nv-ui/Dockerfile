@@ -1,6 +1,6 @@
 FROM caddy:2.7-alpine
 
-COPY app /srv
+COPY dist /srv
 COPY Caddyfile /etc/caddy/Caddyfile
 
 EXPOSE 80

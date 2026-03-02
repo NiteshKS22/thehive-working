@@ -1,49 +1,254 @@
-<div class="row">
-    <div class="col-md-12">
-        <div class="box box-solid">
-            <div class="box-header with-border">
-                <h3 class="box-title">NeuralVyuha Incidents</h3>
-                <div class="box-tools pull-right">
-                    <span class="label label-primary" ng-if="$vm.loading">Loading...</span>
+<!-- NeuralVyuha Enterprise Dashboard -->
+<div class="nv-dashboard" role="main" aria-label="NeuralVyuha Dashboard">
+
+    <!-- Welcome Banner -->
+    <div class="nv-welcome-banner" role="banner">
+        <div class="nv-welcome-content">
+            <h1 class="nv-welcome-title">
+                <i class="fa fa-shield"></i> {{vm.greeting}}, Commander
+            </h1>
+            <p class="nv-welcome-subtitle">NeuralVyuha Prime &mdash; Enterprise Threat Intelligence Platform</p>
+        </div>
+        <div class="nv-welcome-meta">
+            <span class="nv-refresh-indicator" ng-class="{'nv-pulse': vm.autoRefreshEnabled}"
+                aria-label="Auto-refresh status" ng-click="vm.toggleAutoRefresh()" title="Toggle auto-refresh">
+                <i class="fa fa-refresh" ng-class="{'fa-spin': vm.loading}"></i>
+                <span ng-if="vm.autoRefreshEnabled">Live</span>
+                <span ng-if="!vm.autoRefreshEnabled">Paused</span>
+            </span>
+            <span class="nv-last-updated" ng-if="vm.lastRefreshed">
+                Updated {{vm.lastRefreshed | date:'mediumTime'}}
+            </span>
+        </div>
+    </div>
+
+    <!-- Error Banner -->
+    <div class="nv-error-banner" ng-if="vm.error" role="alert">
+        <i class="fa fa-exclamation-circle"></i>
+        <span>{{vm.error}}</span>
+        <button class="nv-retry-btn" ng-click="vm.retry()" aria-label="Retry loading dashboard">
+            <i class="fa fa-refresh"></i> Retry
+        </button>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="row nv-stats-row" role="region" aria-label="Dashboard Statistics">
+        <div class="col-lg-3 col-sm-6">
+            <div class="nv-stat-card nv-stat-incidents" tabindex="0" role="status"
+                aria-label="Total Incidents: {{vm.stats.totalIncidents || 0}}">
+                <div class="nv-stat-icon">
+                    <i class="fa fa-shield"></i>
+                </div>
+                <div class="nv-stat-content">
+                    <span class="nv-stat-value" aria-live="polite">{{vm.stats.totalIncidents || 0}}</span>
+                    <span class="nv-stat-label">Total Incidents</span>
+                </div>
+                <div class="nv-stat-trend nv-trend-neutral">
+                    <i class="fa fa-minus"></i>
                 </div>
             </div>
-            <div class="box-body">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Group ID</th>
-                            <th>Primary Rule</th>
-                            <th>Alert Count</th>
-                            <th>Max Severity</th>
-                            <th>Last Seen</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr ng-repeat="group in $vm.groups" ui-sref="app.nv-group-detail({id: group.group_id})">
-                            <td>{{::group.group_id | limitTo:8}}...</td>
-                            <td>{{::group.primary_rule_name || group._rule_metadata.name}}</td>
-                            <td>{{::group.alert_count}}</td>
-                            <td>
-                                <span class="label" ng-class="{'label-danger': group.max_severity >= 3, 'label-warning': group.max_severity == 2, 'label-info': group.max_severity < 2}">
-                                    {{::group.max_severity}}
-                                </span>
-                            </td>
-                            <td>{{::group.last_seen | date:'short'}}</td>
-                            <td>{{::group.status}}</td>
-                        </tr>
-                         <tr ng-if="$vm.groups.length === 0 && !$vm.loading">
-                            <td colspan="6" class="text-center">No incidents found.</td>
-                        </tr>
-                    </tbody>
-                </table>
+        </div>
+        <div class="col-lg-3 col-sm-6">
+            <div class="nv-stat-card nv-stat-open" tabindex="0" role="status"
+                aria-label="Open Incidents: {{vm.stats.openIncidents || 0}}">
+                <div class="nv-stat-icon">
+                    <i class="fa fa-exclamation-triangle"></i>
+                </div>
+                <div class="nv-stat-content">
+                    <span class="nv-stat-value" aria-live="polite">{{vm.stats.openIncidents || 0}}</span>
+                    <span class="nv-stat-label">Open Incidents</span>
+                </div>
+                <div class="nv-stat-trend nv-trend-neutral">
+                    <i class="fa fa-minus"></i>
+                </div>
             </div>
-            <div class="box-footer clearfix">
-                <ul class="pagination pagination-sm no-margin pull-right">
-                    <li ng-class="{disabled: $vm.params.offset === 0}"><a href="#" ng-click="$vm.prevPage()">«</a></li>
-                    <li><a href="#">{{$vm.params.offset / $vm.params.limit + 1}}</a></li>
-                    <li ng-class="{disabled: $vm.params.offset + $vm.params.limit >= $vm.total}"><a href="#" ng-click="$vm.nextPage()">»</a></li>
-                </ul>
+        </div>
+        <div class="col-lg-3 col-sm-6">
+            <div class="nv-stat-card nv-stat-alerts" tabindex="0" role="status"
+                aria-label="Total Alerts: {{vm.stats.totalAlerts || 0}}">
+                <div class="nv-stat-icon">
+                    <i class="fa fa-bell"></i>
+                </div>
+                <div class="nv-stat-content">
+                    <span class="nv-stat-value" aria-live="polite">{{vm.stats.totalAlerts || 0}}</span>
+                    <span class="nv-stat-label">Total Alerts</span>
+                </div>
+                <div class="nv-stat-trend nv-trend-neutral">
+                    <i class="fa fa-minus"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-sm-6">
+            <div class="nv-stat-card nv-stat-cases" tabindex="0" role="status"
+                aria-label="Active Cases: {{vm.stats.totalCases || 0}}">
+                <div class="nv-stat-icon">
+                    <i class="fa fa-folder-open"></i>
+                </div>
+                <div class="nv-stat-content">
+                    <span class="nv-stat-value" aria-live="polite">{{vm.stats.totalCases || 0}}</span>
+                    <span class="nv-stat-label">Active Cases</span>
+                </div>
+                <div class="nv-stat-trend nv-trend-neutral">
+                    <i class="fa fa-minus"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Row -->
+    <div class="row nv-main-row">
+        <!-- Incident Groups Table -->
+        <div class="col-md-8">
+            <div class="nv-panel nv-panel-glass" role="region" aria-label="Incident Groups">
+                <div class="nv-panel-header">
+                    <h3 class="nv-panel-title"><i class="fa fa-list"></i> Incident Groups</h3>
+                    <div class="nv-panel-actions">
+                        <div class="btn-group btn-group-sm nv-filter-group" role="group" aria-label="Status filter">
+                            <button class="btn nv-filter-btn"
+                                ng-class="{'nv-filter-active': vm.params.status === 'OPEN'}"
+                                ng-click="vm.filterStatus('OPEN')"
+                                aria-pressed="{{vm.params.status === 'OPEN'}}">Open</button>
+                            <button class="btn nv-filter-btn"
+                                ng-class="{'nv-filter-active': vm.params.status === 'CLOSED'}"
+                                ng-click="vm.filterStatus('CLOSED')"
+                                aria-pressed="{{vm.params.status === 'CLOSED'}}">Closed</button>
+                            <button class="btn nv-filter-btn" ng-class="{'nv-filter-active': !vm.params.status}"
+                                ng-click="vm.filterStatus(null)" aria-pressed="{{!vm.params.status}}">All</button>
+                        </div>
+                        <button class="btn btn-sm nv-refresh-btn" ng-click="vm.load()" aria-label="Refresh incidents">
+                            <i class="fa fa-refresh" ng-class="{'fa-spin': vm.loading}"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="nv-panel-body">
+                    <!-- Loading Skeleton -->
+                    <div ng-if="vm.loading" class="nv-skeleton-container" aria-label="Loading incidents">
+                        <div class="nv-skeleton-row" ng-repeat="i in [1,2,3,4,5]">
+                            <div class="nv-skeleton nv-skeleton-id"></div>
+                            <div class="nv-skeleton nv-skeleton-text"></div>
+                            <div class="nv-skeleton nv-skeleton-badge"></div>
+                            <div class="nv-skeleton nv-skeleton-label"></div>
+                            <div class="nv-skeleton nv-skeleton-date"></div>
+                            <div class="nv-skeleton nv-skeleton-status"></div>
+                        </div>
+                    </div>
+
+                    <!-- Data Table -->
+                    <table class="table table-hover nv-table" ng-if="!vm.loading" role="grid">
+                        <thead>
+                            <tr>
+                                <th scope="col">Group ID</th>
+                                <th scope="col">Primary Rule</th>
+                                <th scope="col">Alerts</th>
+                                <th scope="col">Severity</th>
+                                <th scope="col">Last Seen</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr ng-repeat="group in vm.groups" class="nv-table-row" ng-click="vm.openGroup(group)"
+                                ng-keypress="($event.keyCode === 13) && vm.openGroup(group)" tabindex="0" role="row"
+                                aria-label="Incident {{::group.group_id | limitTo:8}}">
+                                <td>
+                                    <code class="nv-id-badge">{{::group.group_id | limitTo:8}}</code>
+                                </td>
+                                <td>
+                                    <strong>{{::group.primary_rule_name || (group._rule_metadata &&
+                                        group._rule_metadata.name) || 'Unknown'}}</strong>
+                                </td>
+                                <td>
+                                    <span class="badge nv-badge-count">{{::group.alert_count}}</span>
+                                </td>
+                                <td>
+                                    <span class="label nv-severity" ng-class="vm.getSeverityClass(group.max_severity)">
+                                        {{vm.getSeverityLabel(group.max_severity)}}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="nv-timestamp">{{::group.last_seen | date:'medium'}}</span>
+                                </td>
+                                <td>
+                                    <span class="label nv-status-label"
+                                        ng-class="{'nv-status-closed': group.status === 'CLOSED', 'nv-status-open': group.status === 'OPEN', 'nv-status-merged': group.status === 'MERGED'}">
+                                        {{::group.status}}
+                                    </span>
+                                </td>
+                            </tr>
+                            <!-- Empty State -->
+                            <tr ng-if="vm.groups.length === 0">
+                                <td colspan="6" class="nv-empty-state">
+                                    <div class="nv-empty-content">
+                                        <i class="fa fa-check-circle nv-empty-icon"></i>
+                                        <p class="nv-empty-text">No incidents found. Your environment is clean.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Pagination Footer -->
+                <div class="nv-panel-footer" ng-if="vm.total > vm.params.limit" role="navigation"
+                    aria-label="Pagination">
+                    <span class="nv-page-info">Showing {{vm.groups.length}} of {{vm.total}} incidents</span>
+                    <div class="nv-pagination">
+                        <button class="btn btn-sm nv-page-btn" ng-click="vm.prevPage()"
+                            ng-disabled="vm.params.offset === 0" aria-label="Previous page">
+                            <i class="fa fa-chevron-left"></i>
+                        </button>
+                        <span class="nv-page-number">{{vm.getCurrentPage()}} / {{vm.getTotalPages()}}</span>
+                        <button class="btn btn-sm nv-page-btn" ng-click="vm.nextPage()"
+                            ng-disabled="vm.params.offset + vm.params.limit >= vm.total" aria-label="Next page">
+                            <i class="fa fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar -->
+        <div class="col-md-4">
+            <!-- System Health -->
+            <div class="nv-panel nv-panel-glass" role="region" aria-label="System Health">
+                <div class="nv-panel-header">
+                    <h3 class="nv-panel-title"><i class="fa fa-heartbeat"></i> System Health</h3>
+                    <span class="nv-health-overall"
+                        ng-class="{'nv-health-good': vm.healthChecks[0].status === 'online', 'nv-health-bad': vm.healthChecks[0].status === 'offline', 'nv-health-checking': vm.healthChecks[0].status === 'checking'}">
+                        <i class="fa fa-circle"></i>
+                    </span>
+                </div>
+                <div class="nv-panel-body">
+                    <div class="nv-health-item" ng-repeat="check in vm.healthChecks" role="status"
+                        aria-label="{{check.label}}: {{check.detail}}">
+                        <div class="nv-health-left">
+                            <span class="nv-health-dot"
+                                ng-class="{'nv-dot-online': check.status === 'online', 'nv-dot-offline': check.status === 'offline', 'nv-dot-checking': check.status === 'checking'}">
+                            </span>
+                            <span class="nv-health-label">{{check.label}}</span>
+                        </div>
+                        <span class="label nv-health-badge"
+                            ng-class="{'label-success': check.status === 'online', 'label-danger': check.status === 'offline', 'label-default': check.status === 'checking'}">
+                            <span ng-if="check.status === 'checking'"><i class="fa fa-spinner fa-spin"></i></span>
+                            <span ng-if="check.status !== 'checking'">{{check.detail}}</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Navigation -->
+            <div class="nv-panel nv-panel-glass nv-panel-nav" role="navigation" aria-label="Quick Navigation">
+                <div class="nv-panel-header">
+                    <h3 class="nv-panel-title"><i class="fa fa-compass"></i> Quick Navigation</h3>
+                </div>
+                <div class="nv-panel-body nv-quick-nav">
+                    <a class="nv-nav-btn" ui-sref="app.nv-help" tabindex="0">
+                        <i class="fa fa-question-circle"></i> Help Center
+                        <i class="fa fa-chevron-right nv-nav-arrow"></i>
+                    </a>
+                    <a class="nv-nav-btn" ui-sref="app.integrations" tabindex="0">
+                        <i class="fa fa-plug"></i> Integrations
+                        <i class="fa fa-chevron-right nv-nav-arrow"></i>
+                    </a>
+                </div>
             </div>
         </div>
     </div>

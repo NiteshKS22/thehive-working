@@ -1,11 +1,11 @@
 // jshint ignore: start
-(function() {
-  var out$ = typeof exports != 'undefined' && exports || this;
+(function () {
+  var out$ = typeof exports != 'undefined' && exports || typeof window != 'undefined' && window || {};
 
   var doctype = '<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">';
 
   function isExternal(url) {
-    return url && url.lastIndexOf('http',0) == 0 && url.lastIndexOf(window.location.host) == -1;
+    return url && url.lastIndexOf('http', 0) == 0 && url.lastIndexOf(window.location.host) == -1;
   }
 
   function inlineImages(el, callback) {
@@ -15,11 +15,11 @@
       callback();
     }
     for (var i = 0; i < images.length; i++) {
-      (function(image) {
+      (function (image) {
         var href = image.getAttributeNS("http://www.w3.org/1999/xlink", "href");
         if (href) {
           if (isExternal(href.value)) {
-            console.warn("Cannot render embedded images linking to external hosts: "+href.value);
+            console.warn("Cannot render embedded images linking to external hosts: " + href.value);
             return;
           }
         }
@@ -28,7 +28,7 @@
         var img = new Image();
         href = href || image.getAttribute('href');
         img.src = href;
-        img.onload = function() {
+        img.onload = function () {
           canvas.width = img.width;
           canvas.height = img.height;
           ctx.drawImage(img, 0, 0);
@@ -38,7 +38,7 @@
             callback();
           }
         }
-        img.onerror = function() {
+        img.onerror = function () {
           left--;
           if (left == 0) {
             callback();
@@ -53,24 +53,24 @@
     var sheets = document.styleSheets;
     for (var i = 0; i < sheets.length; i++) {
       if (isExternal(sheets[i].href)) {
-        console.warn("Cannot include styles from other hosts: "+sheets[i].href);
+        console.warn("Cannot include styles from other hosts: " + sheets[i].href);
         continue;
       }
       var rules = sheets[i].cssRules;
       if (rules != null) {
         for (var j = 0; j < rules.length; j++) {
           var rule = rules[j];
-          if (typeof(rule.style) != "undefined") {
+          if (typeof (rule.style) != "undefined") {
             var match = null;
             try {
               match = el.querySelector(rule.selectorText);
-            } catch(err) {
+            } catch (err) {
               console.warn('Invalid CSS selector "' + rule.selectorText + '"', err);
             }
             if (match) {
               var selector = selectorRemap ? selectorRemap(rule.selectorText) : rule.selectorText;
               css += selector + " { " + rule.style.cssText + " }\n";
-            } else if(rule.cssText.match(/^@font-face/)) {
+            } else if (rule.cssText.match(/^@font-face/)) {
               css += rule.cssText + '\n';
             }
           }
@@ -89,16 +89,16 @@
       parseInt(window.getComputedStyle(el).getPropertyValue(dim));
   }
 
-  out$.svgAsDataUri = function(el, options, cb) {
+  out$.svgAsDataUri = function (el, options, cb) {
     options = options || {};
     options.scale = options.scale || 1;
     var xmlns = "http://www.w3.org/2000/xmlns/";
 
-    inlineImages(el, function() {
+    inlineImages(el, function () {
       var outer = document.createElement("div");
       var clone = el.cloneNode(true);
       var width, height, viewBoxWidth, viewBoxHeight;
-      if(el.tagName == 'svg') {
+      if (el.tagName == 'svg') {
         width = getDimension(el, clone, 'width');
         height = getDimension(el, clone, 'height');
         if (typeof width === "undefined" || width === null || isNaN(parseFloat(width))) {
@@ -115,9 +115,9 @@
         height = box.y + box.height;
         clone.setAttribute('transform', clone.getAttribute('transform').replace(/translate\(.*?\)/, ''));
         viewBoxWidth = width;
-        viewBoxHeight =  height;
+        viewBoxHeight = height;
 
-        var svg = document.createElementNS('http://www.w3.org/2000/svg','svg')
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
         svg.appendChild(clone)
         clone = svg;
       }
@@ -134,8 +134,8 @@
 
       var css = styles(el, options.selectorRemap);
 
-      if(options.backgroundColor) {
-        css += 'svg {background-color: ' + options.backgroundColor +'}';
+      if (options.backgroundColor) {
+        css += 'svg {background-color: ' + options.backgroundColor + '}';
       }
 
       var s = document.createElement('style');
@@ -154,11 +154,11 @@
     });
   }
 
-  out$.saveSvgAsPng = function(el, name, options) {
+  out$.saveSvgAsPng = function (el, name, options) {
     options = options || {};
-    out$.svgAsDataUri(el, options, function(uri) {
+    out$.svgAsDataUri(el, options, function (uri) {
       var image = new Image();
-      image.onload = function() {
+      image.onload = function () {
         var canvas = document.createElement('canvas');
         canvas.width = image.width;
         canvas.height = image.height;
@@ -169,7 +169,7 @@
         a.download = name;
         a.href = canvas.toDataURL('image/png');
         document.body.appendChild(a);
-        a.addEventListener("click", function(e) {
+        a.addEventListener("click", function (e) {
           a.parentNode.removeChild(a);
         });
         a.click();

@@ -64,7 +64,7 @@
                 <thead>
                     <tr>
                         <th width="20px">
-                            <input if-permission="manageTask" allowed="{{userPermissions}}" type="checkbox"
+                            <input type="checkbox"
                                 ng-model="menu.selectAll" ng-change="selectAll()">
                         </th>
                         <th style="width: 70px"></th>
@@ -74,14 +74,13 @@
                         <th style="width: 70px;"></th>
                         <th style="width: 150px">Date</th>
                         <th style="width: 150px">Assignee</th>
-                        <th style="width: 100px" class="text-right" if-permission="manageTask"
-                            allowed="{{userPermissions}}">Actions</th>
+                        <th style="width: 100px" class="text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody ng-repeat="task in list.values">
                     <tr class="task-row" ng-class="{'warning': task.flag == true}">
                         <td>
-                            <input if-permission="manageTask" allowed="{{userPermissions}}" type="checkbox"
+                            <input type="checkbox"
                                 ng-model="task.selected" ng-change="select(task)">
                         </td>
                         <td class="task-status" align="center" ng-switch="task.status">
@@ -164,7 +163,7 @@
                             </span>
                         </td>
                         <!--  class="task-delete" -->
-                        <td align="right" class="task-actions" if-permission="manageTask" allowed="{{userPermissions}}">
+                        <td align="right" class="task-actions">
 
                             <a class="btn btn-icon btn-clear" ng-click="removeTask(task)" uib-tooltip="Delete">
                                 <i class="fa fa-trash text-danger"></i>
@@ -182,8 +181,7 @@
                                 <i class="fa fa-play text-primary"></i>
                             </a>
                             <a href class="btn btn-icon btn-clear" ng-click="getTaskResponders(task, true)"
-                                ng-if="appConfig.connectors.cortex.enabled" if-permission="manageAction"
-                                allowed="{{userPermissions}}">
+                                ng-if="appConfig.connectors.cortex.enabled">
                                 <i class="text-primary fa fa-cog"></i>
                             </a>
                         </td>
@@ -209,7 +207,7 @@
                         <thead>
                             <tr>
                                 <th width="20px">
-                                    <input if-permission="manageTask" allowed="{{userPermissions}}" type="checkbox"
+                                    <input type="checkbox"
                                         ng-model="menu.selectAll" ng-change="selectAll()">
                                 </th>
                                 <th style="width: 70px"></th>
@@ -219,14 +217,13 @@
                                 <th style="width: 70px;"></th>
                                 <th style="width: 150px">Date</th>
                                 <th style="width: 150px">Assignee</th>
-                                <th style="width: 100px" class="text-right" if-permission="manageTask"
-                                    allowed="{{userPermissions}}">Actions</th>
+                                <th style="width: 100px" class="text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody ng-repeat="task in group.tasks">
                             <tr class="task-row" ng-class="{'warning': task.flag == true}">
                                 <td>
-                                    <input if-permission="manageTask" allowed="{{userPermissions}}" type="checkbox"
+                                    <input type="checkbox"
                                         ng-model="task.selected" ng-change="select(task)">
                                 </td>
 
@@ -311,8 +308,7 @@
                                     </span>
                                 </td>
                                 <!--  class="task-delete" -->
-                                <td align="right" class="task-actions" if-permission="manageTask"
-                                    allowed="{{userPermissions}}">
+                                <td align="right" class="task-actions">
 
                                     <a class="btn btn-icon btn-clear" ng-click="removeTask(task)" uib-tooltip="Delete">
                                         <i class="fa fa-trash text-danger"></i>
@@ -330,8 +326,7 @@
                                         <i class="fa fa-play text-primary"></i>
                                     </a>
                                     <a href class="btn btn-icon btn-clear" ng-click="getTaskResponders(task, true)"
-                                        ng-if="appConfig.connectors.cortex.enabled" if-permission="manageAction"
-                                        allowed="{{userPermissions}}">
+                                        ng-if="appConfig.connectors.cortex.enabled">
                                         <i class="text-primary fa fa-cog"></i>
                                     </a>
                                 </td>

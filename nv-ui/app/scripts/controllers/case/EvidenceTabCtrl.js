@@ -10,7 +10,7 @@
      *  - Download via presigned URL (60-second TTL, MinIO credentials never touch client)
      */
     angular.module('theHiveControllers').controller('EvidenceTabCtrl',
-        function ($scope, $q, NvApiSrv, NotificationSrv) {
+        function ($scope, $q, NvApiSrv, nvArtifactSrv, NotificationSrv) {
 
             var vm = $scope;
             vm.artifacts = [];
@@ -103,10 +103,10 @@
 
             // ── Download via presigned URL ────────────────────────────────
             vm.downloadArtifact = function (artifact) {
-                NvApiSrv.getArtifactDownloadUrl(artifact.artifact_id)
-                    .then(function (data) {
+                nvArtifactSrv.getPresignedUrl(artifact.artifact_id || artifact.id)
+                    .then(function (url) {
                         // Open the 60-second presigned URL in a new tab — no credentials involved
-                        window.open(data.url, '_blank');
+                        window.open(url, '_blank');
                     })
                     .catch(function () {
                         NotificationSrv.error('Download', 'Could not generate download link');

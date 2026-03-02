@@ -161,11 +161,12 @@
             };
 
             $scope.switchFlag = function () {
-                if ($scope.caze.flag === true) {
-                    $scope.updateField('flag', false);
-                } else {
-                    $scope.updateField('flag', true);
-                }
+                var newFlag = !$scope.caze.flag;
+                // Optimistic UI update — flip immediately, revert on error
+                $scope.caze.flag = newFlag;
+                $scope.updateField('flag', newFlag).catch(function () {
+                    $scope.caze.flag = !newFlag; // Revert on failure
+                });
             };
 
             // update a specific case field
@@ -182,8 +183,15 @@
 
                 CaseSrv.update({
                     caseId: $scope.caseId
-                }, data, function (/*response*/) {
-                    //UtilsSrv.shallowClearAndCopy(response, $scope.caze);
+                }, data, function (response) {
+                    // Merge the patched fields back into the local case object
+                    angular.extend($scope.caze, data);
+                    // Normalize backend status values for the UI
+                    if ($scope.caze.status === 'CLOSED') {
+                        $scope.caze.status = 'Resolved';
+                    } else if ($scope.caze.status === 'OPEN') {
+                        $scope.caze.status = 'InProgress';
+                    }
                     defer.resolve($scope.caze);
                 }, function (response) {
                     NotificationSrv.error('caseDetails', response.data, response.status);
@@ -279,6 +287,23 @@
                         NotificationSrv.error('Case Merge', err.data, err.status);
                     }
                 });
+            };
+
+            $scope.exportCaseArchive = function () {
+                var password = prompt("Enter a password to encrypt the Case ZIP archive (leave blank for plain JSON):");
+                if (password === null) return; // User cancelled
+
+                var url = '/api/case/' + $scope.caseId + '/export';
+                if (password) {
+                    url += '?password=' + encodeURIComponent(password);
+                }
+
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'case_' + $scope.caseId + (password ? '.zip' : '.json');
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
             };
 
             $scope.exportToMisp = function () {

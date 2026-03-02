@@ -4,7 +4,7 @@
         .controller('CaseListCtrl', CaseListCtrl)
         .controller('CaseBulkDeleteModalCtrl', CaseBulkDeleteModalCtrl);
 
-    function CaseListCtrl($scope, $rootScope, $q, $uibModal, StreamQuerySrv, FilteringSrv, SecuritySrv, ModalUtilsSrv, PaginatedQuerySrv, EntitySrv, CaseSrv, UserSrv, AuthenticationSrv, CaseResolutionStatus, CaseImpactStatus, NotificationSrv, CortexSrv, UtilsSrv) {
+    function CaseListCtrl($scope, $rootScope, $q, $uibModal, $http, StreamQuerySrv, FilteringSrv, SecuritySrv, ModalUtilsSrv, PaginatedQuerySrv, EntitySrv, CaseSrv, UserSrv, AuthenticationSrv, CaseResolutionStatus, CaseImpactStatus, NotificationSrv, CortexSrv, UtilsSrv) {
         var self = this;
 
         this.openEntity = EntitySrv.open;
@@ -420,6 +420,50 @@
                 }
             });
         }
+
+        this.createCase = function () {
+            var modal = $uibModal.open({
+                templateUrl: 'views/partials/case/case.creation.html',
+                controller: 'CaseCreationCtrl',
+                size: 'lg',
+                resolve: {
+                    template: function () { return {}; }
+                }
+            });
+            modal.result.then(function (data) {
+                if (data && data.id) {
+                    $state.go('app.case.details', { caseId: data.id });
+                } else {
+                    self.search();
+                }
+            }).catch(angular.noop);
+        };
+
+        this.importCaseArchive = function () {
+            var input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = function (e) {
+                var file = e.target.files[0];
+                if (!file) return;
+                var reader = new FileReader();
+                reader.onload = function (event) {
+                    try {
+                        var jsonPayload = JSON.parse(event.target.result);
+                        $http.post('/api/case/import', jsonPayload).then(function (response) {
+                            NotificationSrv.log('Case imported successfully: ' + response.data.case_id, 'success');
+                            self.search();
+                        }).catch(function (err) {
+                            NotificationSrv.error('Case Import', err.data ? err.data.detail || err.data : 'Import API failed', err.status);
+                        });
+                    } catch (err) {
+                        NotificationSrv.error('Case Import', 'Invalid JSON file format');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        };
 
         this.getCaseResponders = function (caze, force) {
             if (!force && this.caseResponders !== null) {

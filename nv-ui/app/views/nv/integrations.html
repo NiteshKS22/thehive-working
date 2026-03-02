@@ -1,14 +1,8 @@
 <!--
-  integrations.html — Phase Z2.1: Integration Hub Dashboard
-  NeuralVyuha Prime | Controller: NvIntegrationsCtrl
-  Guardrails: ENCRYPTED_SECRETS | NON_BLOCKING_HEALTH | TENANT_ISOLATION
+  integrations.html — Integration Hub Dashboard
+  NeuralVyuha Prime | Controller: NvIntegrationsCtrl (controllerAs: vm)
 -->
-<!doctype html>
-<html ng-app="theHive">
-
-<head>
-    <meta charset="utf-8">
-    <title>Integration Hub — Neural Nodes | NeuralVyuha</title>
+<div class="nv-integrations-wrapper">
     <style>
         /* ── Variables & Reset ─────────────────────────────────────────── */
         :root {
@@ -716,266 +710,499 @@
         .toast.info {
             border-left: 3px solid var(--accent-blue);
         }
+
+        /* ── Integration Catalog ── */
+        .catalog-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .catalog-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            display: flex;
+            gap: 16px;
+            transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
+        }
+
+        .catalog-card:hover {
+            border-color: #2a3048;
+            box-shadow: var(--shadow);
+        }
+
+        .cat-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .cat-content {
+            flex: 1;
+        }
+
+        .cat-content h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-bottom: 6px;
+        }
+
+        .cat-content p {
+            font-size: 11px;
+            color: var(--text-muted);
+            line-height: 1.4;
+            margin-bottom: 12px;
+        }
+
+        .cat-tags {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .cat-tag {
+            font-size: 10px;
+            padding: 2px 6px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-dim);
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+        }
+
+        .cat-tag.no-key {
+            background: rgba(62, 207, 142, .1);
+            color: #3ecf8e;
+            font-family: inherit;
+            border-radius: 12px;
+            padding: 2px 8px;
+        }
     </style>
-</head>
 
-<body ng-controller="NvIntegrationsCtrl as vm">
+    <div ng-controller="NvIntegrationsCtrl as vm">
 
-    <!-- ── Toast Notifications ── -->
-    <div class="toast-container">
-        <div class="toast {{t.type}}" ng-repeat="t in vm.toasts">
-            {{t.message}}
-        </div>
-    </div>
-
-    <!-- ── Add Node Modal ── -->
-    <div class="modal-overlay" ng-if="vm.showModal" ng-click="vm.closeModal()">
-        <div class="modal" ng-click="$event.stopPropagation()">
-            <button class="close-btn" ng-click="vm.closeModal()">✕</button>
-            <h2>{{vm.editingNode ? 'Edit' : 'Register'}} Neural Node</h2>
-
-            <div class="form-group">
-                <label>Node Type</label>
-                <select id="nv-node-type" ng-model="vm.form.node_type" ng-disabled="!!vm.editingNode">
-                    <option value="cortex">🧠 Cortex (Analyzer Engine)</option>
-                    <option value="misp">🔴 MISP (Threat Intelligence)</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label>Display Name</label>
-                <input id="nv-node-name" type="text" ng-model="vm.form.name" placeholder="e.g. Production Cortex" />
-            </div>
-
-            <div class="form-group">
-                <label>Base URL</label>
-                <input id="nv-node-url" type="url" ng-model="vm.form.url" placeholder="https://cortex.example.com" />
-            </div>
-
-            <div class="form-group">
-                <label>API Key {{vm.editingNode ? '(leave blank to keep current)' : ''}}</label>
-                <input id="nv-node-key" type="password" ng-model="vm.form.api_key"
-                    placeholder="{{vm.editingNode ? '••••••••' : 'Enter API key'}}" autocomplete="new-password" />
-            </div>
-
-            <div class="toggle-row">
-                <span>Verify TLS / SSL Certificate</span>
-                <label class="tgl">
-                    <input type="checkbox" ng-model="vm.form.tls_verify" />
-                    <span class="tgl-slider"></span>
-                </label>
-            </div>
-
-            <!-- Inline test result -->
-            <div class="test-result testing" ng-if="vm.testInProgress">
-                ⟳ &nbsp;Probing endpoint…
-            </div>
-            <div class="test-result ok" ng-if="vm.testResult && vm.testResult.ok">
-                ✓ &nbsp;Connected — {{vm.testResult.latency_ms}}ms &nbsp;(HTTP {{vm.testResult.http_status}})
-            </div>
-            <div class="test-result fail" ng-if="vm.testResult && !vm.testResult.ok">
-                ✗ &nbsp;Failed — {{vm.testResult.error || 'HTTP ' + vm.testResult.http_status}}
-            </div>
-
-            <div class="modal-footer">
-                <button class="btn btn-ghost" ng-click="vm.closeModal()">Cancel</button>
-                <button class="btn btn-ghost" ng-click="vm.testConnection()"
-                    ng-disabled="vm.testInProgress || !vm.form.url">
-                    Test Connection
-                </button>
-                <button id="nv-save-node-btn" class="btn btn-primary" ng-click="vm.saveNode()"
-                    ng-disabled="vm.saving || !vm.form.node_type || !vm.form.name || !vm.form.url">
-                    {{vm.saving ? 'Saving…' : (vm.editingNode ? 'Update' : 'Save & Register')}}
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- ── Page ── -->
-    <div class="hub-page">
-
-        <!-- Header -->
-        <div class="hub-header">
-            <div class="hub-header-icon">⬡</div>
-            <div class="hub-header-text">
-                <h1>Integration Hub</h1>
-                <p>Manage Cortex analysers and MISP threat-intel nodes. Live health via Vyuha-Stream.</p>
-            </div>
-            <div class="hub-header-actions">
-                <!-- Live badge -->
-                <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;"
-                    ng-style="{'color': vm.liveConnected ? '#3ecf8e' : '#718096'}">
-                    <span style="width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block"
-                        ng-class="{'live-pulse': vm.liveConnected}"></span>
-                    {{vm.liveConnected ? 'Live' : 'Offline'}}
-                </div>
-                <button id="nv-add-node-btn" class="btn btn-primary" ng-click="vm.openAddModal()" ng-if="vm.isAdmin">
-                    + Add Node
-                </button>
-                <button class="btn btn-ghost" ng-click="vm.loadNodes()">↺ Refresh</button>
+        <!-- ── Toast Notifications ── -->
+        <div class="toast-container">
+            <div class="toast {{t.type}}" ng-repeat="t in vm.toasts">
+                {{t.message}}
             </div>
         </div>
 
-        <!-- ── Cortex Section ── -->
-        <div class="section-head">
-            <div
-                style="width:24px;height:24px;background:rgba(155,119,232,.2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;">
-                🧠</div>
-            <h2>Cortex Nodes</h2>
-            <span class="count-badge">{{vm.cortexNodes.length}}</span>
-        </div>
+        <!-- ── Add Node Modal ── -->
+        <div class="modal-overlay" ng-if="vm.showModal" ng-click="vm.closeModal()">
+            <div class="modal" ng-click="$event.stopPropagation()">
+                <button class="close-btn" ng-click="vm.closeModal()">✕</button>
+                <h2>{{vm.editingNode ? 'Edit' : 'Register'}} Neural Node</h2>
 
-        <!-- Loading skeleton -->
-        <div class="nodes-grid" ng-if="vm.loading">
-            <div class="node-card" ng-repeat="i in [1,2]">
-                <div class="skeleton" style="height:16px;width:60%;margin-bottom:12px"></div>
-                <div class="skeleton" style="height:12px;width:90%;margin-bottom:8px"></div>
-                <div class="skeleton" style="height:40px;margin-top:16px"></div>
-            </div>
-        </div>
-
-        <div class="nodes-grid" ng-if="!vm.loading && vm.cortexNodes.length">
-            <div class="node-card status-{{node.status}}" ng-repeat="node in vm.cortexNodes" id="nv-node-{{node.id}}">
-
-                <div class="node-card-header">
-                    <div class="node-type-icon cortex">🧠</div>
-                    <div class="node-card-title">
-                        <h3>{{node.name}}</h3>
-                        <div class="node-url">{{node.url}}</div>
-                    </div>
-                    <div class="status-indicator">
-                        <span class="status-dot {{node.status}}"></span>
-                        <span class="status-{{node.status}}">{{node.status}}</span>
-                    </div>
+                <div class="form-group">
+                    <label>Node Type</label>
+                    <select id="nv-node-type" ng-model="vm.form.node_type" ng-disabled="!!vm.editingNode">
+                        <option value="cortex">🧠 Cortex (Analyzer Engine)</option>
+                        <option value="misp">🔴 MISP (Threat Intelligence)</option>
+                    </select>
                 </div>
 
-                <div class="node-metrics">
-                    <div class="metric-item">
-                        <div class="metric-value"
-                            ng-class="{'good': node.latency_ms < 500, 'warn': node.latency_ms >= 500 && node.latency_ms < 2000, 'bad': node.latency_ms >= 2000, 'muted': !node.latency_ms}">
-                            {{node.latency_ms !== null ? (node.latency_ms + 'ms') : '—'}}
-                        </div>
-                        <div class="metric-label">Latency</div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="metric-value"
-                            ng-class="{'good': node.http_status == 200, 'bad': node.http_status && node.http_status != 200, 'muted': !node.http_status}">
-                            {{node.http_status || '—'}}
-                        </div>
-                        <div class="metric-label">HTTP Status</div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="metric-value muted">{{node.probe_count || 0}}</div>
-                        <div class="metric-label">Probes</div>
-                    </div>
+                <div class="form-group">
+                    <label>Display Name</label>
+                    <input id="nv-node-name" type="text" ng-model="vm.form.name" placeholder="e.g. Production Cortex" />
                 </div>
 
-                <div class="api-key-badge">{{node.api_key}}</div>
+                <div class="form-group">
+                    <label>Base URL</label>
+                    <input id="nv-node-url" type="url" ng-model="vm.form.url"
+                        placeholder="https://cortex.example.com" />
+                </div>
 
-                <div class="error-hint" ng-if="node.last_error">⚠ {{node.last_error}}</div>
+                <div class="form-group">
+                    <label>API Key {{vm.editingNode ? '(leave blank to keep current)' : ''}}</label>
+                    <input id="nv-node-key" type="password" ng-model="vm.form.api_key"
+                        placeholder="{{vm.editingNode ? '••••••••' : 'Enter API key'}}" autocomplete="new-password" />
+                </div>
 
-                <div class="node-card-footer">
-                    <span class="probe-meta" ng-if="node.last_seen">
-                        Last seen {{node.last_seen | date:'HH:mm:ss'}}
-                    </span>
-                    <span class="spacer"></span>
-                    <button class="btn btn-ghost" style="height:30px;padding:0 10px;font-size:12px;"
-                        ng-click="vm.quickTest(node)" ng-disabled="node._testing">
-                        {{node._testing ? '…' : '⚡ Test'}}
+                <div class="toggle-row">
+                    <span>Verify TLS / SSL Certificate</span>
+                    <label class="tgl">
+                        <input type="checkbox" ng-model="vm.form.tls_verify" />
+                        <span class="tgl-slider"></span>
+                    </label>
+                </div>
+
+                <!-- Inline test result -->
+                <div class="test-result testing" ng-if="vm.testInProgress">
+                    ⟳ &nbsp;Probing endpoint…
+                </div>
+                <div class="test-result ok" ng-if="vm.testResult && vm.testResult.ok">
+                    ✓ &nbsp;Connected — {{vm.testResult.latency_ms}}ms &nbsp;(HTTP {{vm.testResult.http_status}})
+                </div>
+                <div class="test-result fail" ng-if="vm.testResult && !vm.testResult.ok">
+                    ✗ &nbsp;Failed — {{vm.testResult.error || 'HTTP ' + vm.testResult.http_status}}
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" ng-click="vm.closeModal()">Cancel</button>
+                    <button class="btn btn-ghost" ng-click="vm.testConnection()"
+                        ng-disabled="vm.testInProgress || !vm.form.url">
+                        Test Connection
                     </button>
-                    <button class="btn btn-ghost" style="height:30px;padding:0 10px;font-size:12px;"
-                        ng-click="vm.openEditModal(node)" ng-if="vm.isAdmin">
-                        ✎
-                    </button>
-                    <button class="btn btn-danger" style="height:30px;padding:0 10px;font-size:12px;"
-                        ng-click="vm.deleteNode(node)" ng-if="vm.isAdmin">
-                        ✕
+                    <button id="nv-save-node-btn" class="btn btn-primary" ng-click="vm.saveNode()"
+                        ng-disabled="vm.saving || !vm.form.node_type || !vm.form.name || !vm.form.url">
+                        {{vm.saving ? 'Saving…' : (vm.editingNode ? 'Update' : 'Save & Register')}}
                     </button>
                 </div>
             </div>
         </div>
 
-        <div class="empty-state" ng-if="!vm.loading && !vm.cortexNodes.length">
-            <div class="glyph">🧠</div>
-            <p>No Cortex nodes registered.<br>
-                <span ng-if="vm.isAdmin">Click <strong>+ Add Node</strong> to connect a Cortex instance.</span>
-                <span ng-if="!vm.isAdmin">Contact your administrator to configure Cortex integration.</span>
-            </p>
-        </div>
+        <!-- ── Page ── -->
+        <div class="hub-page">
 
-        <hr class="section-sep">
-
-        <!-- ── MISP Section ── -->
-        <div class="section-head">
-            <div
-                style="width:24px;height:24px;background:rgba(224,92,106,.15);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;">
-                🔴</div>
-            <h2>MISP Nodes</h2>
-            <span class="count-badge">{{vm.mispNodes.length}}</span>
-        </div>
-
-        <div class="nodes-grid" ng-if="!vm.loading && vm.mispNodes.length">
-            <div class="node-card status-{{node.status}}" ng-repeat="node in vm.mispNodes" id="nv-node-{{node.id}}">
-
-                <div class="node-card-header">
-                    <div class="node-type-icon misp">🔴</div>
-                    <div class="node-card-title">
-                        <h3>{{node.name}}</h3>
-                        <div class="node-url">{{node.url}}</div>
-                    </div>
-                    <div class="status-indicator">
-                        <span class="status-dot {{node.status}}"></span>
-                        <span class="status-{{node.status}}">{{node.status}}</span>
-                    </div>
+            <!-- Header -->
+            <div class="hub-header">
+                <div class="hub-header-icon">⬡</div>
+                <div class="hub-header-text">
+                    <h1>Integration Hub</h1>
+                    <p>Manage Cortex analysers and MISP threat-intel nodes. Live health via Vyuha-Stream.</p>
                 </div>
-
-                <div class="node-metrics">
-                    <div class="metric-item">
-                        <div class="metric-value"
-                            ng-class="{'good': node.latency_ms < 500, 'warn': node.latency_ms >= 500 && node.latency_ms < 2000, 'bad': node.latency_ms >= 2000, 'muted': !node.latency_ms}">
-                            {{node.latency_ms !== null ? (node.latency_ms + 'ms') : '—'}}
-                        </div>
-                        <div class="metric-label">Latency</div>
+                <div class="hub-header-actions">
+                    <!-- Live badge -->
+                    <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;"
+                        ng-style="{'color': vm.liveConnected ? '#3ecf8e' : '#718096'}">
+                        <span
+                            style="width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block"
+                            ng-class="{'live-pulse': vm.liveConnected}"></span>
+                        {{vm.liveConnected ? 'Live' : 'Offline'}}
                     </div>
-                    <div class="metric-item">
-                        <div class="metric-value"
-                            ng-class="{'good': node.http_status == 200, 'bad': node.http_status && node.http_status != 200, 'muted': !node.http_status}">
-                            {{node.http_status || '—'}}
-                        </div>
-                        <div class="metric-label">HTTP Status</div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="metric-value muted">{{node.probe_count || 0}}</div>
-                        <div class="metric-label">Probes</div>
-                    </div>
-                </div>
-
-                <div class="api-key-badge">{{node.api_key}}</div>
-                <div class="error-hint" ng-if="node.last_error">⚠ {{node.last_error}}</div>
-
-                <div class="node-card-footer">
-                    <span class="probe-meta" ng-if="node.last_seen">Last seen {{node.last_seen |
-                        date:'HH:mm:ss'}}</span>
-                    <span class="spacer"></span>
-                    <button class="btn btn-ghost" style="height:30px;padding:0 10px;font-size:12px;"
-                        ng-click="vm.quickTest(node)" ng-disabled="node._testing">
-                        {{node._testing ? '…' : '⚡ Test'}}
+                    <button id="nv-add-node-btn" class="btn btn-primary" ng-click="vm.openAddModal()"
+                        ng-if="vm.isAdmin">
+                        + Add Node
                     </button>
-                    <button class="btn btn-ghost" style="height:30px;padding:0 10px;font-size:12px;"
-                        ng-click="vm.openEditModal(node)" ng-if="vm.isAdmin">✎</button>
-                    <button class="btn btn-danger" style="height:30px;padding:0 10px;font-size:12px;"
-                        ng-click="vm.deleteNode(node)" ng-if="vm.isAdmin">✕</button>
+                    <button class="btn btn-ghost" ng-click="vm.loadNodes()">↺ Refresh</button>
                 </div>
             </div>
-        </div>
 
-        <div class="empty-state" ng-if="!vm.loading && !vm.mispNodes.length">
-            <div class="glyph">🔴</div>
-            <p>No MISP nodes registered.</p>
-        </div>
+            <!-- ── Cortex Section ── -->
+            <div class="section-head">
+                <div
+                    style="width:24px;height:24px;background:rgba(155,119,232,.2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;">
+                    🧠</div>
+                <h2>Cortex Nodes</h2>
+                <span class="count-badge">{{vm.cortexNodes.length}}</span>
+            </div>
 
-    </div><!-- /.hub-page -->
+            <!-- Loading skeleton -->
+            <div class="nodes-grid" ng-if="vm.loading">
+                <div class="node-card" ng-repeat="i in [1,2]">
+                    <div class="skeleton" style="height:16px;width:60%;margin-bottom:12px"></div>
+                    <div class="skeleton" style="height:12px;width:90%;margin-bottom:8px"></div>
+                    <div class="skeleton" style="height:40px;margin-top:16px"></div>
+                </div>
+            </div>
 
-</body>
+            <div class="nodes-grid" ng-if="!vm.loading && vm.cortexNodes.length">
+                <div class="node-card status-{{node.status}}" ng-repeat="node in vm.cortexNodes"
+                    id="nv-node-{{node.id}}">
 
-</html>
+                    <div class="node-card-header">
+                        <div class="node-type-icon cortex">🧠</div>
+                        <div class="node-card-title">
+                            <h3>{{node.name}}</h3>
+                            <div class="node-url">{{node.url}}</div>
+                        </div>
+                        <div class="status-indicator">
+                            <span class="status-dot {{node.status}}"></span>
+                            <span class="status-{{node.status}}">{{node.status}}</span>
+                        </div>
+                    </div>
+
+                    <div class="node-metrics">
+                        <div class="metric-item">
+                            <div class="metric-value"
+                                ng-class="{'good': node.latency_ms < 500, 'warn': node.latency_ms >= 500 && node.latency_ms < 2000, 'bad': node.latency_ms >= 2000, 'muted': !node.latency_ms}">
+                                {{node.latency_ms !== null ? (node.latency_ms + 'ms') : '—'}}
+                            </div>
+                            <div class="metric-label">Latency</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value"
+                                ng-class="{'good': node.http_status == 200, 'bad': node.http_status && node.http_status != 200, 'muted': !node.http_status}">
+                                {{node.http_status || '—'}}
+                            </div>
+                            <div class="metric-label">HTTP Status</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value muted">{{node.probe_count || 0}}</div>
+                            <div class="metric-label">Probes</div>
+                        </div>
+                    </div>
+
+                    <div class="api-key-badge">{{node.api_key}}</div>
+
+                    <div class="error-hint" ng-if="node.last_error">⚠ {{node.last_error}}</div>
+
+                    <div class="node-card-footer">
+                        <span class="probe-meta" ng-if="node.last_seen">
+                            Last seen {{node.last_seen | date:'HH:mm:ss'}}
+                        </span>
+                        <span class="spacer"></span>
+                        <button class="btn btn-ghost" style="height:30px;padding:0 10px;font-size:12px;"
+                            ng-click="vm.quickTest(node)" ng-disabled="node._testing">
+                            {{node._testing ? '…' : '⚡ Test'}}
+                        </button>
+                        <button class="btn btn-ghost" style="height:30px;padding:0 10px;font-size:12px;"
+                            ng-click="vm.openEditModal(node)" ng-if="vm.isAdmin">
+                            ✎
+                        </button>
+                        <button class="btn btn-danger" style="height:30px;padding:0 10px;font-size:12px;"
+                            ng-click="vm.deleteNode(node)" ng-if="vm.isAdmin">
+                            ✕
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="empty-state" ng-if="!vm.loading && !vm.cortexNodes.length">
+                <div class="glyph">🧠</div>
+                <p>No Cortex nodes registered.<br>
+                    <span ng-if="vm.isAdmin">Click <strong>+ Add Node</strong> to connect a Cortex instance.</span>
+                    <span ng-if="!vm.isAdmin">Contact your administrator to configure Cortex integration.</span>
+                </p>
+            </div>
+
+            <hr class="section-sep">
+
+            <!-- ── MISP Section ── -->
+            <div class="section-head">
+                <div
+                    style="width:24px;height:24px;background:rgba(224,92,106,.15);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;">
+                    🔴</div>
+                <h2>MISP Nodes</h2>
+                <span class="count-badge">{{vm.mispNodes.length}}</span>
+            </div>
+
+            <div class="nodes-grid" ng-if="!vm.loading && vm.mispNodes.length">
+                <div class="node-card status-{{node.status}}" ng-repeat="node in vm.mispNodes" id="nv-node-{{node.id}}">
+
+                    <div class="node-card-header">
+                        <div class="node-type-icon misp">🔴</div>
+                        <div class="node-card-title">
+                            <h3>{{node.name}}</h3>
+                            <div class="node-url">{{node.url}}</div>
+                        </div>
+                        <div class="status-indicator">
+                            <span class="status-dot {{node.status}}"></span>
+                            <span class="status-{{node.status}}">{{node.status}}</span>
+                        </div>
+                    </div>
+
+                    <div class="node-metrics">
+                        <div class="metric-item">
+                            <div class="metric-value"
+                                ng-class="{'good': node.latency_ms < 500, 'warn': node.latency_ms >= 500 && node.latency_ms < 2000, 'bad': node.latency_ms >= 2000, 'muted': !node.latency_ms}">
+                                {{node.latency_ms !== null ? (node.latency_ms + 'ms') : '—'}}
+                            </div>
+                            <div class="metric-label">Latency</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value"
+                                ng-class="{'good': node.http_status == 200, 'bad': node.http_status && node.http_status != 200, 'muted': !node.http_status}">
+                                {{node.http_status || '—'}}
+                            </div>
+                            <div class="metric-label">HTTP Status</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value muted">{{node.probe_count || 0}}</div>
+                            <div class="metric-label">Probes</div>
+                        </div>
+                    </div>
+
+                    <div class="api-key-badge">{{node.api_key}}</div>
+                    <div class="error-hint" ng-if="node.last_error">⚠ {{node.last_error}}</div>
+
+                    <div class="node-card-footer">
+                        <span class="probe-meta" ng-if="node.last_seen">Last seen {{node.last_seen |
+                            date:'HH:mm:ss'}}</span>
+                        <span class="spacer"></span>
+                        <button class="btn btn-ghost" style="height:30px;padding:0 10px;font-size:12px;"
+                            ng-click="vm.quickTest(node)" ng-disabled="node._testing">
+                            {{node._testing ? '…' : '⚡ Test'}}
+                        </button>
+                        <button class="btn btn-ghost" style="height:30px;padding:0 10px;font-size:12px;"
+                            ng-click="vm.openEditModal(node)" ng-if="vm.isAdmin">✎</button>
+                        <button class="btn btn-danger" style="height:30px;padding:0 10px;font-size:12px;"
+                            ng-click="vm.deleteNode(node)" ng-if="vm.isAdmin">✕</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="empty-state" ng-if="!vm.loading && !vm.mispNodes.length">
+                <div class="glyph">🔴</div>
+                <p>No MISP nodes registered.</p>
+            </div>
+
+            <hr class="section-sep">
+
+            <!-- ── Integration Catalog Section ── -->
+            <div class="section-head">
+                <div
+                    style="width:24px;height:24px;background:rgba(74,158,255,.15);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;">
+                    📦</div>
+                <h2>Integration Catalog</h2>
+                <span class="count-badge">12</span>
+            </div>
+
+            <div class="catalog-grid">
+                <div class="catalog-card">
+                    <div class="cat-icon">🧠</div>
+                    <div class="cat-content">
+                        <h3>Cortex</h3>
+                        <p>Elastic analyzer engine for threat intelligence enrichment</p>
+                        <div class="cat-tags">
+                            <span class="cat-tag">ip</span><span class="cat-tag">domain</span><span
+                                class="cat-tag">url</span><span class="cat-tag">hash</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="catalog-card">
+                    <div class="cat-icon">🔴</div>
+                    <div class="cat-content">
+                        <h3>MISP</h3>
+                        <p>Open-source threat intelligence sharing platform</p>
+                        <div class="cat-tags">
+                            <span class="cat-tag">ip</span><span class="cat-tag">domain</span><span
+                                class="cat-tag">url</span><span class="cat-tag">hash</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="catalog-card">
+                    <div class="cat-icon">🦠</div>
+                    <div class="cat-content">
+                        <h3>VirusTotal</h3>
+                        <p>Multi-engine malware scanner and URL/IP reputation. 500 lookups/day free</p>
+                        <div class="cat-tags">
+                            <span class="cat-tag">ip</span><span class="cat-tag">domain</span><span
+                                class="cat-tag">url</span><span class="cat-tag">hash</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="catalog-card">
+                    <div class="cat-icon">🚫</div>
+                    <div class="cat-content">
+                        <h3>AbuseIPDB</h3>
+                        <p>IP abuse & malicious activity reports. 1,000 checks/day free</p>
+                        <div class="cat-tags">
+                            <span class="cat-tag">ip</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="catalog-card">
+                    <div class="cat-icon">👽</div>
+                    <div class="cat-content">
+                        <h3>AlienVault OTX</h3>
+                        <p>Open Threat Exchange — unlimited free community threat intel</p>
+                        <div class="cat-tags">
+                            <span class="cat-tag">ip</span><span class="cat-tag">domain</span><span
+                                class="cat-tag">url</span><span class="cat-tag">hash</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="catalog-card">
+                    <div class="cat-icon">🔭</div>
+                    <div class="cat-content">
+                        <h3>Shodan</h3>
+                        <p>Internet-wide scanner. Free: 100 results/month</p>
+                        <div class="cat-tags">
+                            <span class="cat-tag">ip</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="catalog-card">
+                    <div class="cat-icon">🌐</div>
+                    <div class="cat-content">
+                        <h3>URLhaus</h3>
+                        <p>Abuse.ch — malicious URL tracking. No API key needed</p>
+                        <div class="cat-tags">
+                            <span class="cat-tag">url</span><span class="cat-tag">domain</span><span
+                                class="cat-tag">hash</span>
+                            <span class="cat-tag no-key">No API key</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="catalog-card">
+                    <div class="cat-icon">💾</div>
+                    <div class="cat-content">
+                        <h3>MalwareBazaar</h3>
+                        <p>Abuse.ch — malware hash lookup. No API key needed</p>
+                        <div class="cat-tags">
+                            <span class="cat-tag">hash</span>
+                            <span class="cat-tag no-key">No API key</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="catalog-card">
+                    <div class="cat-icon">🦊</div>
+                    <div class="cat-content">
+                        <h3>ThreatFox</h3>
+                        <p>Abuse.ch — IOC sharing. No API key needed</p>
+                        <div class="cat-tags">
+                            <span class="cat-tag">ip</span><span class="cat-tag">domain</span><span
+                                class="cat-tag">url</span><span class="cat-tag">hash</span>
+                            <span class="cat-tag no-key">No API key</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="catalog-card">
+                    <div class="cat-icon">📡</div>
+                    <div class="cat-content">
+                        <h3>GreyNoise</h3>
+                        <p>Internet scan context — distinguishes noise from targeted attacks. Community tier free</p>
+                        <div class="cat-tags">
+                            <span class="cat-tag">ip</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="catalog-card">
+                    <div class="cat-icon">🌍</div>
+                    <div class="cat-content">
+                        <h3>IPInfo</h3>
+                        <p>IP geolocation, ASN, org data. 50k lookups/month free</p>
+                        <div class="cat-tags">
+                            <span class="cat-tag">ip</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="catalog-card">
+                    <div class="cat-icon">🎣</div>
+                    <div class="cat-content">
+                        <h3>PhishTank</h3>
+                        <p>Community phishing URL database. No API key needed</p>
+                        <div class="cat-tags">
+                            <span class="cat-tag">url</span>
+                            <span class="cat-tag no-key">No API key</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div><!-- /.nv-integrations-wrapper -->

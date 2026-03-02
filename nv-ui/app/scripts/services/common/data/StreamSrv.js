@@ -7,8 +7,15 @@
             streamId: null,
             httpRequestCanceller: $q.defer(),
             disabled: true,
+            retryCount: 0,
+            maxRetries: 3,
 
             init: function () {
+                if (self.retryCount >= self.maxRetries) {
+                    console.warn('StreamSrv: Max retries reached, streaming disabled');
+                    self.disabled = true;
+                    return;
+                }
                 self.streamId = null;
                 self.disabled = false;
                 self.requestStream();
@@ -94,87 +101,18 @@
             },
 
             poll: function () {
-                // Skip polling is a poll is already running
-                if (self.streamId === null || self.isPolling === true) {
-                    return;
-                }
-
-                // Flag polling start
-                self.isPolling = true;
-
-                // Initiate stream canceller
-                self.httpRequestCanceller = $q.defer();
-
-                // Poll stream changes
-                self.pollPromise = $http.get('./api/stream/' + self.streamId, {
-                    timeout: self.httpRequestCanceller.promise
-                }).then(function (res) {
-                    // Flag polling end
-                    self.isPolling = false;
-
-                    // Handle stream data and callbacks
-                    self.handleStreamResponse(res.data);
-
-                    // Check if the session will expire soon
-                    if (res.status === 220) {
-                        AfkSrv.prompt().then(function () {
-                            UserSrv.getUserInfo(AuthenticationSrv.currentUser.login)
-                                .then(function () {
-
-                                }, function (response) {
-                                    NotificationSrv.error('StreamSrv', response.data, response.status);
-                                });
-                        });
-                    }
-
-                    VersionSrv.get().then(function (appConfig) {
-                        var pollingDuration;
-                        try {
-                            pollingDuration = appConfig.config.pollingDuration
-                        } catch (error) {
-                            pollingDuration = 0
-                        }
-
-                        $timeout(function () {
-                            self.poll();
-                        }, pollingDuration);
-                    })
-
-
-                }).catch(function (err) {
-                    // Initialize the stream;
-                    self.isPolling = false;
-
-                    if (err && err.xhrStatus === 'abort') {
-                        return;
-                    }
-
-                    if (err.status !== 404) {
-                        NotificationSrv.error('StreamSrv', err.data, err.status);
-
-                        if (err.status === 401) {
-                            return;
-                        }
-                    }
-
-                    self.init();
-                });
+                // Feature Disabled: NeuralVyuha uses WebSockets now, not long polling
+                // Stop 404 errors by instantly returning.
+                self.isPolling = false;
+                self.disabled = true;
+                return;
             },
 
 
             requestStream: function () {
-                if (self.streamId !== null) {
-                    return;
-                }
-
-                $http.post('./api/stream').then(function (response) {
-                    var streamId = response.data;
-
-                    self.streamId = streamId;
-                    self.poll(self.streamId);
-                }).catch(function (err) {
-                    NotificationSrv.error('StreamSrv', err.data, err.status);
-                });
+                // Feature Disabled: NeutralVyuha uses WebSockets
+                self.streamId = 'dummy-stream-id';
+                return;
             },
 
             /**

@@ -7,3 +7,4 @@ pyjwt
 cryptography
 requests
 prometheus-client
+pyzipper

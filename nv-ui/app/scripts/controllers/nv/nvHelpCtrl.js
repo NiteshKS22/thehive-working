@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    angular.module('theHive').controller('NvHelpCtrl', function ($scope, $http) {
+    angular.module('theHiveControllers').controller('NvHelpCtrl', function ($scope, $http) {
         var vm = this;
         vm.currentSection = 'intro';
         vm.searchText = '';
@@ -9,7 +9,7 @@
         vm.loadingManual = false;
 
         // Load full manual only when requested
-        $scope.$watch('vm.currentSection', function(newVal) {
+        $scope.$watch('vm.currentSection', function (newVal) {
             if (newVal === 'manual' && !vm.manualContent) {
                 vm.loadingManual = true;
                 // Attempt to load generated manual JSON or MD.
@@ -19,8 +19,8 @@
 
                 // In a real build, we'd have a task to copy USER_MANUAL.md to 'assets/manual.md'
                 // For now, let's just put a placeholder message or try to fetch from a relative path if served.
-                 vm.manualContent = "The full User Manual is available in the 'docs/' folder of the project repository. Please refer to [User Manual](../../docs/USER_MANUAL.md) for detailed technical specifications.";
-                 vm.loadingManual = false;
+                vm.manualContent = "The full User Manual is available in the 'docs/' folder of the project repository. Please refer to [User Manual](../../docs/USER_MANUAL.md) for detailed technical specifications.";
+                vm.loadingManual = false;
             }
         });
     });

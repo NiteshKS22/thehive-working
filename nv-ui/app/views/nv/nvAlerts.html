@@ -1,0 +1,90 @@
+<div class="nv-dashboard" role="main" aria-label="NeuralVyuha Alerts">
+    <div class="nv-welcome-banner" role="banner">
+        <div class="nv-welcome-content">
+            <h1 class="nv-welcome-title">
+                <i class="fa fa-bell"></i> Alerts Triage
+            </h1>
+            <p class="nv-welcome-subtitle">Review incoming intelligence and triaged alerts.</p>
+        </div>
+    </div>
+    <div class="nv-error-banner" ng-if="vm.error" role="alert">
+        <i class="fa fa-exclamation-circle"></i>
+        <span>{{vm.error}}</span>
+        <button class="nv-retry-btn" ng-click="vm.retry()" aria-label="Retry">
+            <i class="fa fa-refresh"></i> Retry
+        </button>
+    </div>
+    <div class="row nv-main-row">
+        <div class="col-md-12">
+            <div class="nv-panel nv-panel-glass">
+                <div class="nv-panel-header">
+                    <h3 class="nv-panel-title"><i class="fa fa-list"></i> Raw Alerts</h3>
+                    <div class="nv-panel-actions">
+                        <div class="btn-group btn-group-sm nv-filter-group">
+                            <button class="btn nv-filter-btn"
+                                ng-class="{'nv-filter-active': vm.params.status === 'New'}"
+                                ng-click="vm.filterStatus('New')">New</button>
+                            <button class="btn nv-filter-btn"
+                                ng-class="{'nv-filter-active': vm.params.status === 'Updated'}"
+                                ng-click="vm.filterStatus('Updated')">Updated</button>
+                            <button class="btn nv-filter-btn" ng-class="{'nv-filter-active': !vm.params.status}"
+                                ng-click="vm.filterStatus(null)">All</button>
+                        </div>
+                        <button class="btn btn-sm nv-refresh-btn" ng-click="vm.load()">
+                            <i class="fa fa-refresh" ng-class="{'fa-spin': vm.loading}"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="nv-panel-body">
+                    <div ng-if="vm.loading" class="nv-skeleton-container">
+                        <div class="nv-skeleton-row" ng-repeat="i in [1,2,3,4,5]">
+                            <div class="nv-skeleton nv-skeleton-id"></div>
+                            <div class="nv-skeleton nv-skeleton-text"></div>
+                            <div class="nv-skeleton nv-skeleton-badge"></div>
+                            <div class="nv-skeleton nv-skeleton-label"></div>
+                            <div class="nv-skeleton nv-skeleton-status"></div>
+                        </div>
+                    </div>
+                    <table class="table table-hover nv-table" ng-if="!vm.loading">
+                        <thead>
+                            <tr>
+                                <th>Source Ref</th>
+                                <th>Title</th>
+                                <th>Severity</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr ng-repeat="alert in vm.alerts" class="nv-table-row">
+                                <td><code class="nv-id-badge">{{::alert.sourceRef || alert.id}}</code></td>
+                                <td><strong>{{::alert.title}}</strong></td>
+                                <td><span class="label nv-severity"
+                                        ng-class="vm.getSeverityClass(alert.severity)">{{vm.getSeverityLabel(alert.severity)}}</span>
+                                </td>
+                                <td><span class="nv-timestamp">{{::alert.createdAt | date:'medium'}}</span></td>
+                                <td><span class="label nv-status-label">{{::alert.status || 'New'}}</span></td>
+                            </tr>
+                            <tr ng-if="vm.alerts.length === 0">
+                                <td colspan="5" class="nv-empty-state">
+                                    <p>No alerts found.</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="nv-panel-footer" ng-if="vm.total > vm.params.size">
+                    <span class="nv-page-info">Showing {{vm.alerts.length}} of {{vm.total}} alerts</span>
+                    <div class="nv-pagination">
+                        <button class="btn btn-sm nv-page-btn" ng-click="vm.prevPage()"
+                            ng-disabled="vm.params.from_ === 0"><i class="fa fa-chevron-left"></i></button>
+                        <span class="nv-page-number">{{vm.getCurrentPage()}} / {{vm.getTotalPages()}}</span>
+                        <button class="btn btn-sm nv-page-btn" ng-click="vm.nextPage()"
+                            ng-disabled="vm.params.from_ + vm.params.size >= vm.total"><i
+                                class="fa fa-chevron-right"></i></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -6,7 +6,7 @@
             </h4>
             <div>
                 This task requires an action from your organisation.
-                <button if-permission="manageTask" allowed="{{userPermissions}}" class="ml-m btn btn-sm btn-default"
+                <button class="ml-m btn btn-sm btn-default"
                     ng-click="markAsDone(task)">Mark as Done</button>
             </div>
         </div>
@@ -14,8 +14,8 @@
     <h4 class="mb-xs text-primary">
         Basic Information
 
-        <div class="task-actions pull-right" if-permission="manageTask" allowed="{{userPermissions}}">
-            <!-- <span if-permission="manageShare" allowed="{{userPermissions}}"> -->
+        <div class="task-actions pull-right">
+            <!-- <span> -->
             <span>
                 <a href ng-click="scrollTo('#task-sharings')">
                     <span class="mr-xxs action-button">
@@ -56,8 +56,7 @@
                 </span>
             </a>
 
-            <span class="action-button" uib-dropdown ng-if="appConfig.connectors.cortex.enabled"
-                if-permission="manageAction" allowed="{{userPermissions}}">
+            <span class="action-button" uib-dropdown ng-if="appConfig.connectors.cortex.enabled">
 
                 <span class="mh-xxs text-primary">|</span>
 
@@ -183,7 +182,7 @@
         <div class="row clearfix" ng-show="!adding">
             <div class="col-md-12">
                 <div class="btn-toolbar" role="toolbar">
-                    <div class="btn-group" uib-dropdown if-permission="manageTask" allowed="{{userPermissions}}">
+                    <div class="btn-group" uib-dropdown>
                         <button class="btn btn-sm btn-primary" ng-click="showLogEditor()">
                             <i class="fa fa-plus"></i>
                             Add new task log</button>
@@ -250,10 +249,10 @@
         <psearch control="logs"></psearch>
     </div>
 
-    <!-- <div class="col-md-12" id="task-sharings" if-permission="manageShare" allowed="{{userPermissions}}"> -->
+    <!-- <div class="col-md-12" id="task-sharings"> -->
     <div class="col-md-12" id="task-sharings">
         <h4 class="vpad10 text-primary">Task sharing</h4>
-        <div class="btn-toolbar" role="toolbar" if-permission="manageShare" allowed="{{userPermissions}}">
+        <div class="btn-toolbar" role="toolbar">
             <div class="btn-group">
                 <button class="btn btn-sm btn-primary" ng-click="addTaskShare()">
                     <i class="fa fa-plus"></i>

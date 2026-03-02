@@ -1,6 +1,6 @@
-(function() {
+(function () {
     'use strict';
-    angular.module('theHiveServices').service('CaseTabsSrv', function() {
+    angular.module('theHiveServices').service('CaseTabsSrv', function () {
 
         var tabs = {
             'details': {
@@ -8,6 +8,12 @@
                 active: true,
                 label: 'Details',
                 state: 'app.case.details'
+            },
+            'pages': {
+                name: 'pages',
+                active: false,
+                label: 'Pages',
+                state: 'app.case.pages'
             },
             'tasks': {
                 name: 'tasks',
@@ -31,24 +37,24 @@
 
         this.activeIndex = 0;
 
-        this.initTabs = function() {
-            angular.forEach(tabs, function(tab, key) {
+        this.initTabs = function () {
+            angular.forEach(tabs, function (tab, key) {
                 if (tab.closable === true) {
                     delete tabs[key];
                 }
             });
         };
 
-        this.getTabs = function() {
+        this.getTabs = function () {
             return tabs;
         };
 
-        this.getTab = function(name) {
+        this.getTab = function (name) {
             return tabs[name];
         };
 
-        this.activateTab = function(tab) {
-            angular.forEach(tabs, function(tab) {
+        this.activateTab = function (tab) {
+            angular.forEach(tabs, function (tab) {
                 tab.active = false;
             });
 
@@ -61,14 +67,14 @@
             }
         };
 
-        this.addTab = function(tab, options) {
+        this.addTab = function (tab, options) {
             options.closable = true;
 
             tabs[tab] = options;
             this.activeIndex = Object.keys(tabs).length - 1;
         };
 
-        this.removeTab = function(tab) {
+        this.removeTab = function (tab) {
             var tabItem = tabs[tab];
 
             if (!tabItem) {

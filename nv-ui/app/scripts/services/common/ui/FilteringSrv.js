@@ -1,8 +1,8 @@
-(function() {
+(function () {
     'use strict';
     angular.module('theHiveServices')
-        .service('FilteringSrv', function($q, DashboardSrv, QueryBuilderSrv, localStorageService) {
-            return function(entity, sectionName, config) {
+        .service('FilteringSrv', function ($q, DashboardSrv, QueryBuilderSrv, localStorageService) {
+            return function (entity, sectionName, config) {
                 var self = this;
 
                 this.entity = entity;
@@ -13,20 +13,26 @@
                 this.defaultFilter = config.defaultFilter || {};
                 this.attributeKeys = [];
 
-                this.initContext = function(state) {
+                this.initContext = function (state) {
                     self.state = state;
                     return DashboardSrv.getMetadata(this.config.version || 'v0')
-                        .then(function(response) {
-                            self.metadata = response;
-                            self.attributes = angular.copy(response[self.entity].attributes);
+                        .then(function (response) {
+                            console.log('FilteringSrv: metadata response for', self.entity, response);
+                            self.metadata = response || {};
+                            var entityMetadata = (response && response[self.entity]) ? response[self.entity] : { attributes: {} };
+                            self.attributes = angular.copy(entityMetadata.attributes || {});
 
-                            _.each(self.config.excludes || [], function(exclude) {
+                            if (!response || !response[self.entity]) {
+                                console.warn('FilteringSrv: Missing metadata for entity', self.entity);
+                            }
+
+                            _.each(self.config.excludes || [], function (exclude) {
                                 delete self.attributes[exclude];
                             });
 
                             self.attributeKeys = _.keys(self.attributes).sort();
                         })
-                        .then(function() {
+                        .then(function () {
                             var storedContext = localStorageService.get(self.sectionName);
                             if (storedContext && storedContext.state && storedContext.state === state) {
                                 self.context = storedContext;
@@ -47,28 +53,28 @@
                         });
                 };
 
-                this.buildQuery = function() {
+                this.buildQuery = function () {
                     return QueryBuilderSrv.buildFiltersQuery(this.attributes, this.context.filters);
                 };
 
-                this.addFilter = function(filter) {
+                this.addFilter = function (filter) {
                     this.context.filters.push(filter || {
                         field: null,
                         type: null
                     });
                 };
 
-                this.clearFilters = function() {
+                this.clearFilters = function () {
                     this.context.filters = [];
                     return $q.resolve();
                 };
 
-                this.removeFilter = function(index) {
+                this.removeFilter = function (index) {
                     this.context.filters.splice(index, 1);
                     return $q.resolve();
                 };
 
-                this.setFilterField = function(filter) {
+                this.setFilterField = function (filter) {
                     var field = this.attributes[filter.field];
 
                     if (!field) {
@@ -87,46 +93,46 @@
                     }
                 };
 
-                this.filterFields = function() {
-                    return _.filter(this.attributes, function(value, key) {
+                this.filterFields = function () {
+                    return _.filter(this.attributes, function (value, key) {
                         return !key.startsWith('computed.');
                     });
                 };
 
-                this.countSorts = function() {
+                this.countSorts = function () {
                     return self.context.sort.length;
                 };
 
-                this.toggleStats = function() {
+                this.toggleStats = function () {
                     self.context.showStats = !self.context.showStats;
                     self.storeContext();
                 };
 
-                this.toggleFilters = function() {
+                this.toggleFilters = function () {
                     self.context.showFilters = !self.context.showFilters;
                     self.storeContext();
                 };
 
-                this.toggleAdvanced = function() {
+                this.toggleAdvanced = function () {
                     self.context.showAdvanced = !self.context.showAdvanced;
                     self.storeContext();
                 };
 
-                this.setPageSize = function(pageSize) {
+                this.setPageSize = function (pageSize) {
                     self.context.pageSize = pageSize;
                     self.storeContext();
                 };
 
-                this.setSort = function(sorts) {
+                this.setSort = function (sorts) {
                     self.context.sort = sorts;
                     self.storeContext();
                 };
 
-                this.storeContext = function() {
+                this.storeContext = function () {
                     localStorageService.set(self.sectionName, self.context);
                 };
 
-                this.resetContext = function() {
+                this.resetContext = function () {
                     self.context = {
                         state: self.state,
                         showFilters: self.defaults.showFilters || false,
@@ -142,7 +148,7 @@
                 this.addFilterValue = function (field, value) {
                     var filterDef = self.attributes[field];
 
-                    if(!filterDef) {
+                    if (!filterDef) {
                         return;
                     }
 
@@ -153,7 +159,7 @@
                             type: filterDef.type
                         };
 
-                    switch(type) {
+                    switch (type) {
                         case 'date':
                             date = moment(value);
                             filter.value = {
@@ -172,12 +178,12 @@
                             break;
                         case 'number':
                         case 'enumeration':
-                            if(!_.isArray(value)) {
+                            if (!_.isArray(value)) {
 
                             }
 
                             filter.value = {
-                                list: _.map(_.isArray(value) ? value : [value], function(item) {
+                                list: _.map(_.isArray(value) ? value : [value], function (item) {
                                     return {
                                         text: item,
                                         label: filterDef.labels[filterDef.values.indexOf(item)] || item
@@ -199,11 +205,11 @@
                             break;
                     }
 
-                    var pos = _.findIndex(this.context.filters, function(item) {
+                    var pos = _.findIndex(this.context.filters, function (item) {
                         return item.field === field;
                     });
 
-                    if(pos>-1) {
+                    if (pos > -1) {
                         this.context.filters.splice(pos, 1);
                         this.context.filters.push(filter);
                     } else {

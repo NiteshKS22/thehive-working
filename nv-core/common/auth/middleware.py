@@ -29,6 +29,7 @@ class AuthContext(BaseModel):
     tenant_id: str
     roles: List[str] = []
     permissions: Set[str] = set()
+    token: Optional[str] = None
 
 async def get_auth_context(request: Request) -> AuthContext:
     config = get_config()
@@ -105,7 +106,7 @@ async def get_auth_context(request: Request) -> AuthContext:
             roles = []
 
         permissions = resolve_permissions(roles)
-        return AuthContext(user_id=user_id, tenant_id=tenant_id, roles=roles, permissions=permissions)
+        return AuthContext(user_id=user_id, tenant_id=tenant_id, roles=roles, permissions=permissions, token=token)
 
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")

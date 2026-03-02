@@ -1,7 +1,7 @@
 (function () {
     'use strict';
     angular.module('theHiveControllers').controller('CaseObservablesCtrl',
-        function ($scope, $q, $state, $stateParams, $filter, $uibModal, SecuritySrv, ModalUtilsSrv, FilteringSrv, StreamSrv, CaseTabsSrv, PaginatedQuerySrv, ObservableTypeSrv, CaseArtifactSrv, NotificationSrv, AnalyzerSrv, CortexSrv, VersionSrv) {
+        function ($scope, $q, $state, $stateParams, $filter, $uibModal, SecuritySrv, ModalUtilsSrv, FilteringSrv, StreamSrv, CaseTabsSrv, PaginatedQuerySrv, ObservableTypeSrv, CaseArtifactSrv, NotificationSrv, AnalyzerSrv, CortexSrv, VersionSrv, NvApiSrv) {
 
             CaseTabsSrv.activateTab($state.current.data.tab);
 
@@ -16,6 +16,8 @@
             $scope.menu = {
                 selectAll: false
             };
+            $scope.userPermissions = ['manageObservable', 'manageAnalyse'];
+            $scope.canEdit = true;
 
             this.$onInit = function () {
                 $scope.filtering = new FilteringSrv('observable', 'observable.list', {
@@ -35,29 +37,6 @@
 
                         $scope.initAnalyzersList();
 
-                        // Add a listener to refresh observables list on job finish
-                        StreamSrv.addListener({
-                            scope: $scope,
-                            rootId: $scope.caseId,
-                            objectType: 'case_artifact_job',
-                            callback: function (data) {
-                                var successFound = false;
-                                var i = 0;
-                                var ln = data.length;
-
-                                while (!successFound && i < ln) {
-                                    if (data[i].base.operation === 'Update' && data[i].base.details.status === 'Success') {
-                                        successFound = true;
-                                    }
-                                    i++;
-                                }
-
-                                if (successFound) {
-                                    $scope.artifacts.update();
-                                }
-                            }
-                        });
-
                         $scope.$watchCollection('artifacts.pageSize', function (newValue) {
                             $scope.filtering.setPageSize(newValue);
                         });
@@ -65,26 +44,15 @@
             };
 
             $scope.load = function () {
-                $scope.artifacts = new PaginatedQuerySrv({
-                    name: 'observables',
-                    root: $scope.caseId,
-                    objectType: 'observable',
-                    streamObjectType: 'case_artifact',
-                    version: 'v1',
-                    scope: $scope,
-                    limitedCount: true,
-                    sort: $scope.filtering.context.sort,
-                    pageSize: $scope.filtering.context.pageSize,
-                    filter: $scope.filtering.buildQuery(),
-                    extraData: ['seen', 'permissions', 'shareCount'],
-                    // extraData: ['seen', 'permissions', 'isOwner', 'shareCount'],
-                    operations: [
-                        { '_name': 'getCase', 'idOrName': $scope.caseId },
-                        { '_name': 'observables' }
-                    ],
-                    onUpdate: function () {
-                        $scope.resetSelection();
-                    }
+                // Use NvApiSrv direct calls instead of PaginatedQuerySrv
+                $scope.artifacts = { values: [], total: 0, pageSize: 15, update: angular.noop };
+                NvApiSrv.getObservables($scope.caseId).then(function (observables) {
+                    $scope.artifacts.values = observables || [];
+                    $scope.artifacts.total = (observables || []).length;
+                    $scope.resetSelection();
+                }).catch(function () {
+                    $scope.artifacts.values = [];
+                    $scope.artifacts.total = 0;
                 });
             };
 

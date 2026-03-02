@@ -121,6 +121,8 @@ CREATE TABLE IF NOT EXISTS cases (
     description TEXT,
     severity INT NOT NULL DEFAULT 1,
     status VARCHAR(32) NOT NULL CHECK (status IN ('OPEN', 'CLOSED')),
+    visibility VARCHAR(32) NOT NULL DEFAULT 'ORGANIZATION' CHECK (visibility IN ('ORGANIZATION', 'PRIVATE')),
+    permitted_users TEXT[] NULL,
     created_by VARCHAR(255) NOT NULL,
     assigned_to VARCHAR(255) NULL,
     created_at BIGINT NOT NULL,
@@ -131,6 +133,19 @@ CREATE TABLE IF NOT EXISTS cases (
 
 CREATE INDEX IF NOT EXISTS idx_cases_tenant_status ON cases(tenant_id, status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cases_tenant_severity ON cases(tenant_id, severity, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS case_links (
+    tenant_id VARCHAR(64) NOT NULL,
+    case_id UUID NOT NULL,
+    target_case_id UUID NOT NULL,
+    linked_by VARCHAR(255) NOT NULL,
+    linked_at BIGINT NOT NULL,
+    PRIMARY KEY (tenant_id, case_id, target_case_id),
+    FOREIGN KEY (tenant_id, case_id) REFERENCES cases(tenant_id, case_id) ON DELETE CASCADE,
+    FOREIGN KEY (tenant_id, target_case_id) REFERENCES cases(tenant_id, case_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_case_links_tenant_target ON case_links(tenant_id, target_case_id);
 
 CREATE TABLE IF NOT EXISTS case_tasks (
     tenant_id VARCHAR(64) NOT NULL,
@@ -174,3 +189,60 @@ CREATE TABLE IF NOT EXISTS case_alert_links (
 
 CREATE INDEX IF NOT EXISTS idx_case_links_tenant_alert ON case_alert_links(tenant_id, original_event_id);
 CREATE INDEX IF NOT EXISTS idx_case_links_tenant_case ON case_alert_links(tenant_id, case_id, linked_at DESC);
+
+-- Phase E3.1 Schema: Task Logs & Templates
+
+CREATE TABLE IF NOT EXISTS case_task_logs (
+    tenant_id VARCHAR(64) NOT NULL,
+    case_id UUID NOT NULL,
+    task_id UUID NOT NULL,
+    log_id UUID NOT NULL,
+    body TEXT NOT NULL,
+    created_by VARCHAR(255) NOT NULL,
+    created_at BIGINT NOT NULL,
+    PRIMARY KEY (tenant_id, case_id, task_id, log_id),
+    FOREIGN KEY (tenant_id, case_id, task_id) REFERENCES case_tasks(tenant_id, case_id, task_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_logs_tenant_task ON case_task_logs(tenant_id, case_id, task_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS case_templates (
+    tenant_id VARCHAR(64) NOT NULL,
+    template_id UUID NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    title_prefix VARCHAR(255) NOT NULL,
+    severity INT NOT NULL DEFAULT 2,
+    description TEXT,
+    created_by VARCHAR(255) NOT NULL,
+    created_at BIGINT NOT NULL,
+    PRIMARY KEY (tenant_id, template_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_case_templates_tenant ON case_templates(tenant_id, name);
+
+CREATE TABLE IF NOT EXISTS case_template_tasks (
+    tenant_id VARCHAR(64) NOT NULL,
+    template_id UUID NOT NULL,
+    task_id UUID NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    PRIMARY KEY (tenant_id, template_id, task_id),
+    FOREIGN KEY (tenant_id, template_id) REFERENCES case_templates(tenant_id, template_id) ON DELETE CASCADE
+);
+
+-- Phase 5.2 Schema: Case Pages
+CREATE TABLE IF NOT EXISTS case_pages (
+    tenant_id VARCHAR(64) NOT NULL,
+    case_id UUID NOT NULL,
+    page_id UUID NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    created_by VARCHAR(255) NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    PRIMARY KEY (tenant_id, case_id, page_id),
+    FOREIGN KEY (tenant_id, case_id) REFERENCES cases(tenant_id, case_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_case_pages_tenant_case ON case_pages(tenant_id, case_id, updated_at DESC);
+

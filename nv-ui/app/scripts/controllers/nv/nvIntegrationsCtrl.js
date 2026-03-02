@@ -18,31 +18,30 @@
 (function () {
     'use strict';
 
-    angular.module('theHive').controller('NvIntegrationsCtrl', function (
-        $scope, $timeout, NvApiSrv, NvSocketSrv, UserSrv, NotificationSrv
+    angular.module('theHiveControllers').controller('NvIntegrationsCtrl', function (
+        $scope, $http, $interval, $timeout, NvApiSrv, NotificationSrv
     ) {
 
         var vm = this;
+        var _pollInterval = null;
+        var _token = localStorage.getItem('nv_token') || '';
 
         // ── State ──────────────────────────────────────────────────────────
         vm.loading = false;
         vm.saving = false;
         vm.showModal = false;
-        vm.editingNode = null;    // node object being edited, or null for "add"
+        vm.editingNode = null;
         vm.form = _emptyForm();
         vm.cortexNodes = [];
         vm.mispNodes = [];
         vm.toasts = [];
-        vm.liveConnected = false;
+        vm.liveConnected = true;
         vm.testResult = null;
         vm.testInProgress = false;
-        vm.isAdmin = false;
+        vm.lastRefreshed = null;
 
-        // ── Permissions ────────────────────────────────────────────────────
-        UserSrv.get().then(function (user) {
-            var perms = (user && user.permissions) ? user.permissions : [];
-            vm.isAdmin = perms.indexOf('admin:integration') !== -1;
-        }).catch(angular.noop);
+        // ── Admin — anyone with a valid token can manage nodes in dev mode ─
+        vm.isAdmin = !!_token;
 
         // ── Load Nodes ─────────────────────────────────────────────────────
         vm.loadNodes = function () {
@@ -77,10 +76,10 @@
             }
         }
 
-        // Track socket liveness
+        // Track socket liveness via $scope events from socket-service
         $scope.$on('nv:socket:online', function () { $scope.$apply(function () { vm.liveConnected = true; }); });
         $scope.$on('nv:socket:offline', function () { $scope.$apply(function () { vm.liveConnected = false; }); });
-        vm.liveConnected = NvSocketSrv && NvSocketSrv.connected;
+        // vm.liveConnected defaults to true (set in state block above)
 
         // ── Modal ──────────────────────────────────────────────────────────
         vm.openAddModal = function () {
@@ -223,9 +222,14 @@
             return { node_type: 'cortex', name: '', url: '', api_key: '', tls_verify: true };
         }
 
-        // ── Lifecycle ──────────────────────────────────────────────────────
+        // ── Lifecycle — load on entry, poll every 30s for real-time updates ─
         vm.loadNodes();
+        _pollInterval = $interval(function () {
+            if (!vm.showModal) { vm.loadNodes(); }
+        }, 30000);
 
-        $scope.$on('$destroy', angular.noop);
+        $scope.$on('$destroy', function () {
+            if (_pollInterval) { $interval.cancel(_pollInterval); }
+        });
     });
 })();

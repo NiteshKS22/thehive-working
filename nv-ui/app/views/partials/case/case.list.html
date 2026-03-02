@@ -43,7 +43,7 @@
                                 <tr>
                                     <th style="width: 10px;" class="p-0"></th>
                                     <th width="20px">
-                                        <input if-permission="manageCase" type="checkbox" ng-model="$vm.menu.selectAll"
+                                        <input type="checkbox" ng-model="$vm.menu.selectAll"
                                             ng-change="$vm.selectAll()">
                                     </th>
                                     <th width="100px">
@@ -150,8 +150,7 @@
                                     <td class="p-0 bg-tlp-{{currentCase.tlp}} clickable"
                                         ng-click="$vm.addFilterValue('tlp', currentCase.tlp)"></td>
                                     <td>
-                                        <input if-permission="manageCase"
-                                            allowed="{{currentCase.extraData.permissions.join(',')}}" type="checkbox"
+                                        <input type="checkbox"
                                             ng-model="currentCase.selected" ng-change="$vm.select(currentCase)">
                                     </td>
                                     <td class="case-status">
@@ -299,8 +298,7 @@
                                         <!-- <a href class="text-primary noline nowrap" ng-click="$vm.getCaseResponders(currentCase, true)" uib-dropdown-toggle> -->
                                         <a href class="btn btn-icon btn-clear"
                                             ng-click="$vm.getCaseResponders(currentCase, true)"
-                                            ng-if="appConfig.connectors.cortex.enabled" if-permission="manageAction"
-                                            allowed="{{currentCase.extraData.permissions.join(',')}}">
+                                            ng-if="appConfig.connectors.cortex.enabled">
                                             <i class="text-info fa fa-cog"></i>
                                         </a>
                                     </td>

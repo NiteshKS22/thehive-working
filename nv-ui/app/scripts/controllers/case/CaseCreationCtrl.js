@@ -4,7 +4,7 @@
 (function () {
     'use strict';
     angular.module('theHiveControllers').controller('CaseCreationCtrl',
-        function ($rootScope, $scope, $uibModalInstance, CaseSrv, TaxonomyCacheSrv, NotificationSrv, TagSrv, template) {
+        function ($rootScope, $scope, $uibModalInstance, CaseSrv, TaxonomyCacheSrv, NotificationSrv, TagSrv, UserSrv, AuthenticationSrv, template) {
 
             $rootScope.title = 'New case';
             $scope.activeTlp = 'active';
@@ -30,7 +30,7 @@
                     tlp: template.tlp,
                     pap: template.pap,
                     severity: template.severity
-                }, {tlp: 2, pap: 2});
+                }, { tlp: 2, pap: 2 });
 
                 // Set tags from template
                 $scope.tags = template.tags;
@@ -43,9 +43,17 @@
             } else {
                 $scope.tasks = [];
                 $scope.newCase = {
-                    status: 'Open'
+                    status: 'Open',
+                    visibility: 'ORGANIZATION',
+                    permitted_users: []
                 };
             }
+
+            $scope.permittedUsersTags = [];
+
+            $scope.getUsers = function (query) {
+                return UserSrv.autoComplete(AuthenticationSrv.currentUser.organisation, query);
+            };
 
             $scope.updateTlp = function (tlp) {
                 $scope.newCase.tlp = tlp;
@@ -65,6 +73,14 @@
                     $scope.newCase.tags.push(tag.text);
                 });
                 $scope.newCase.tags = $.unique($scope.newCase.tags.sort());
+
+                // Handle permitted users
+                $scope.newCase.permitted_users = [];
+                if ($scope.newCase.visibility === 'PRIVATE') {
+                    angular.forEach($scope.permittedUsersTags, function (tag) {
+                        $scope.newCase.permitted_users.push(tag.text);
+                    });
+                }
 
                 // Append title prefix
                 if ($scope.fromTemplate) {
@@ -88,9 +104,9 @@
                 });
             };
 
-            $scope.fromTagLibrary = function() {
+            $scope.fromTagLibrary = function () {
                 TaxonomyCacheSrv.openTagLibrary()
-                    .then(function(tags){
+                    .then(function (tags) {
                         $scope.tags = $scope.tags.concat(tags);
                     })
             };
@@ -111,11 +127,11 @@
                 $uibModalInstance.dismiss();
             };
 
-            $scope.getTags = function(query) {
+            $scope.getTags = function (query) {
                 return TagSrv.autoComplete(query);
             };
 
-            $scope.keys = function(o) {
+            $scope.keys = function (o) {
                 return _.keys(o).length;
             };
         }

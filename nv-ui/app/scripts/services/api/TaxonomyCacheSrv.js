@@ -30,7 +30,7 @@
             };
 
             this.getColour = function (tag) {
-                return self.tagsCache[tag];
+                return self.tagsCache ? self.tagsCache[tag] : undefined;
             };
 
             this.cacheTagColors = function (tags) {

@@ -43,6 +43,18 @@
             });
         };
 
+        service.getAlerts = function (params) {
+            return $http.get(baseUrl + '/alerts', {
+                params: params,
+                headers: getHeaders(),
+                timeout: NvConfig.timeoutMs
+            }).then(function (res) {
+                return res.data;
+            }).catch(function (err) {
+                return handleError(err, 'Alerts List');
+            });
+        };
+
         service.getGroup = function (id) {
             return $http.get(baseUrl + '/groups/' + id, {
                 headers: getHeaders(),
@@ -108,7 +120,7 @@
         // --- Write Operations (Phase E6.4) ---
         service.createCase = function (caze) {
             var headers = getHeaders();
-            headers['Idempotency-Key'] = UtilsSrv.uuid(); // Assuming UtilsSrv exists or I need to implement UUID helper
+            headers['Idempotency-Key'] = UtilsSrv.guid(); // Assuming UtilsSrv exists or I need to implement UUID helper
 
             return $http.post(baseUrl + '/cases', caze, {
                 headers: headers,
@@ -123,7 +135,7 @@
         service.updateCase = function (id, updates) {
             var headers = getHeaders();
             // Idempotency key for update? Maybe optional but good practice.
-            headers['Idempotency-Key'] = UtilsSrv.uuid();
+            headers['Idempotency-Key'] = UtilsSrv.guid();
 
             return $http.patch(baseUrl + '/cases/' + id, updates, {
                 headers: headers,
@@ -135,11 +147,36 @@
             });
         };
 
+        service.linkCase = function (caseId, targetCaseId) {
+            var headers = getHeaders();
+            headers['Idempotency-Key'] = UtilsSrv.guid();
+
+            return $http.post(baseUrl + '/cases/' + caseId + '/links', { target_case_id: targetCaseId }, {
+                headers: headers,
+                timeout: NvConfig.timeoutMs
+            }).then(function (res) {
+                return res.data;
+            }).catch(function (err) {
+                return handleError(err, 'Link Case');
+            });
+        };
+
+        service.getCaseLinks = function (id) {
+            return $http.get(baseUrl + '/cases/' + id + '/links', {
+                headers: getHeaders(),
+                timeout: NvConfig.timeoutMs
+            }).then(function (res) {
+                return res.data;
+            }).catch(function (err) {
+                return handleError(err, 'Case Links');
+            });
+        };
+
         service.createTask = function (caseId, task) {
             var headers = getHeaders();
-            headers['Idempotency-Key'] = UtilsSrv.uuid();
+            headers['Idempotency-Key'] = UtilsSrv.guid();
 
-            return $http.post(baseUrl + '/cases/' + caseId + '/tasks', task, {
+            return $http.post(baseUrl + '/case/' + caseId + '/task', task, {
                 headers: headers,
                 timeout: NvConfig.timeoutMs
             }).then(function (res) {
@@ -151,7 +188,7 @@
 
         service.createTaskLog = function (taskId, log) {
             var headers = getHeaders();
-            headers['Idempotency-Key'] = UtilsSrv.uuid();
+            headers['Idempotency-Key'] = UtilsSrv.guid();
 
             return $http.post(baseUrl + '/tasks/' + taskId + '/logs', log, {
                 headers: headers,
@@ -230,8 +267,9 @@
             });
         };
 
-        // --- Integration Hub (Phase Z2.1 Node Manager) ---
-        var nodeBaseUrl = (NvConfig.nvNodeServiceUrl || NvConfig.nvBaseUrl.replace(/\/nv-query/, '/node-service'));
+        // Integration Hub — Node Service (Phase Z2.1)
+        // Routed via Caddy: /node-service/* → nv-node-service:8085
+        var nodeBaseUrl = '/node-service';
 
         service.getNodes = function (nodeType) {
             var params = nodeType ? '?node_type=' + nodeType : '';
@@ -254,14 +292,108 @@
 
         service.testNode = function (nodeId) {
             return $http.post(nodeBaseUrl + '/nodes/' + nodeId + '/test', {}, {
-                headers: getHeaders(), timeout: 20000  // Allow 15s for slow nodes
+                headers: getHeaders(), timeout: 20000  // Allow 20s for slow nodes
             }).then(function (res) { return res.data; });
+        };
+
+        // --- Health Check (Enterprise Dashboard) ---
+        service.healthCheck = function () {
+            return $http.get(baseUrl + '/status', {
+                headers: getHeaders(),
+                timeout: 5000
+            }).then(function (res) {
+                return res.data;
+            }).catch(function () {
+                return null;
+            });
         };
 
         service.deleteNode = function (nodeId) {
             return $http.delete(nodeBaseUrl + '/nodes/' + nodeId, {
                 headers: getHeaders(), timeout: NvConfig.timeoutMs
             }).then(function (res) { return res.data; });
+        };
+
+        // --- Tasks ---
+        service.getTasks = function (caseId) {
+            return $http.get(baseUrl + '/case/' + caseId + '/task', {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'Tasks List'); });
+        };
+
+        service.getTask = function (taskId) {
+            return $http.get(baseUrl + '/tasks/' + taskId, {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'Task Detail'); });
+        };
+
+        service.getTaskLogs = function (taskId) {
+            return $http.get(baseUrl + '/tasks/' + taskId + '/logs', {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'Task Logs'); });
+        };
+
+        service.deleteTask = function (caseId, taskId) {
+            return $http.delete(baseUrl + '/case/' + caseId + '/task/' + taskId, {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'Delete Task'); });
+        };
+
+        service.updateTask = function (caseId, taskId, data) {
+            return $http.patch(baseUrl + '/case/' + caseId + '/task/' + taskId, data, {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'Update Task'); });
+        };
+
+        // --- Observables ---
+        service.getObservables = function (caseId) {
+            return $http.get(baseUrl + '/case/' + caseId + '/observable', {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'Observables List'); });
+        };
+
+        service.createObservable = function (caseId, data) {
+            return $http.post(baseUrl + '/case/' + caseId + '/observable', data, {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'Create Observable'); });
+        };
+
+        service.deleteObservable = function (caseId, obsId) {
+            return $http.delete(baseUrl + '/case/' + caseId + '/observable/' + obsId, {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'Delete Observable'); });
+        };
+
+        service.updateObservable = function (caseId, obsId, data) {
+            return $http.patch(baseUrl + '/case/' + caseId + '/observable/' + obsId, data, {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'Update Observable'); });
+        };
+
+        // --- TTPs ---
+        service.getTtps = function (caseId) {
+            return $http.get(baseUrl + '/case/' + caseId + '/ttp', {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'TTPs List'); });
+        };
+
+        service.addTtp = function (caseId, data) {
+            return $http.post(baseUrl + '/case/' + caseId + '/ttp', data, {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'Add TTP'); });
+        };
+
+        service.removeTtp = function (caseId, ttpId) {
+            return $http.delete(baseUrl + '/case/' + caseId + '/ttp/' + ttpId, {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'Remove TTP'); });
+        };
+
+        // --- Pages ---
+        service.getPages = function (caseId) {
+            return $http.get(baseUrl + '/case/' + caseId + '/page', {
+                headers: getHeaders(), timeout: NvConfig.timeoutMs
+            }).then(function (res) { return res.data; }).catch(function (err) { return handleError(err, 'Pages List'); });
         };
 
         return service;

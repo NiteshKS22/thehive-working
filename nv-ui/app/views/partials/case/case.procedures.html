@@ -104,7 +104,7 @@
                 </div>
                 <div class="ttp-action">
                     <a class="btn btn-icon btn-clear text-danger" href ng-click="$vm.remove(proc)"
-                        uib-tooltip="Delete TTP" if-permission="manageProcedure" allowed="{{userPermissions}}">
+                        uib-tooltip="Delete TTP">
                         <i class="fa fa-trash"></i>
                     </a>
                 </div>
@@ -132,11 +132,11 @@
                     </div>
                     <div class="col-sm-3">
                         <label>Occured At</label>
-                        <div if-permission="manageProcedure" allowed="{{userPermissions}}">
+                        <div>
                             <updatable-date on-update="$vm.updateField(proc, 'occurDate', true)" value="proc.occurDate"
                                 clearable="false"></updatable-date>
                         </div>
-                        <div class="description-pane" if-not-permission="manageProcedure" allowed="{{userPermissions}}">
+                        <div class="description-pane" if-not-permission="manageProcedure">
                             <span>{{(proc.occurDate | shortDate) || '-'}}</span>
                         </div>
                     </div>
@@ -144,11 +144,11 @@
                 <div class="row">
                     <div class="col-sm-12">
                         <label>Procedure</label>
-                        <div class="description-pane" if-permission="manageProcedure" allowed="{{userPermissions}}">
+                        <div class="description-pane">
                             <updatable-text on-update="$vm.updateField(proc, 'description')" value="proc.description">
                             </updatable-text>
                         </div>
-                        <div class="description-pane" if-not-permission="manageProcedure" allowed="{{userPermissions}}">
+                        <div class="description-pane" if-not-permission="manageProcedure">
                             <div ng-if="!proc.description">
                                 <em class="text-warning">Not Specified</em>
                             </div>

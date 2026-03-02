@@ -30,14 +30,9 @@ class TestAuthMiddleware(unittest.TestCase):
     def setUp(self):
         self.secret = "test-secret"
 
-    @patch('common.auth.middleware.get_config')
-    def test_dev_mode_safe_defaults(self, mock_config):
+    @patch.dict('os.environ', {'DEV_MODE': 'true', 'JWT_ALGORITHM': 'HS256', 'ALLOW_DEV_OVERRIDES': 'false'})
+    def test_dev_mode_safe_defaults(self):
         # Case: DEV_MODE=True, ALLOW_DEV_OVERRIDES=False
-        mock_config.return_value = {
-            "DEV_MODE": True,
-            "ALLOW_DEV_OVERRIDES": False,
-            "JWT_ALGORITHM": "HS256"
-        }
 
         # Try to override
         headers = {"X-Dev-Tenant": "hacker-tenant"}
@@ -49,15 +44,9 @@ class TestAuthMiddleware(unittest.TestCase):
         self.assertIn(ROLE_ADMIN, data["roles"])
         self.assertIn(PERM_ALERT_INGEST, data["permissions"]) # Admin has all perms
 
-    @patch('common.auth.middleware.get_config')
-    def test_permissions_resolution(self, mock_config):
+    @patch.dict('os.environ', {'DEV_MODE': 'false', 'JWT_ALGORITHM': 'HS256', 'JWT_SECRET': 'secret', 'OIDC_ISSUER': 'issuer'})
+    def test_permissions_resolution(self):
         # Case: JWT with ROLE_ANALYST
-        mock_config.return_value = {
-            "DEV_MODE": False,
-            "JWT_SECRET": "secret",
-            "JWT_ALGORITHM": "HS256",
-            "OIDC_ISSUER": "issuer"
-        }
         
         token = jwt.encode({
             "sub": "user1",
@@ -75,14 +64,8 @@ class TestAuthMiddleware(unittest.TestCase):
         self.assertIn(PERM_ALERT_READ, data["permissions"])
         self.assertNotIn(PERM_ALERT_INGEST, data["permissions"])
 
-    @patch('common.auth.middleware.get_config')
-    def test_require_permission_success(self, mock_config):
-        mock_config.return_value = {
-            "DEV_MODE": False,
-            "JWT_SECRET": "secret",
-            "JWT_ALGORITHM": "HS256",
-            "OIDC_ISSUER": "issuer"
-        }
+    @patch.dict('os.environ', {'DEV_MODE': 'false', 'JWT_ALGORITHM': 'HS256', 'JWT_SECRET': 'secret', 'OIDC_ISSUER': 'issuer'})
+    def test_require_permission_success(self):
         # User with ADMIN role (has INGEST perm)
         token = jwt.encode({
             "sub": "user1",
@@ -96,14 +79,8 @@ class TestAuthMiddleware(unittest.TestCase):
         resp = client.get("/perm-check", headers=headers)
         self.assertEqual(resp.status_code, 200)
 
-    @patch('common.auth.middleware.get_config')
-    def test_require_permission_fail(self, mock_config):
-        mock_config.return_value = {
-            "DEV_MODE": False,
-            "JWT_SECRET": "secret",
-            "JWT_ALGORITHM": "HS256",
-            "OIDC_ISSUER": "issuer"
-        }
+    @patch.dict('os.environ', {'DEV_MODE': 'false', 'JWT_ALGORITHM': 'HS256', 'JWT_SECRET': 'secret', 'OIDC_ISSUER': 'issuer'})
+    def test_require_permission_fail(self):
         # User with ANALYST role (NO INGEST perm)
         token = jwt.encode({
             "sub": "user1",

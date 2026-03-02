@@ -2,10 +2,12 @@
     <div class="box-header with-border">
         <h3 class="box-title text-primary">
             <!-- <severity value="caze.severity"></severity> -->
-            <span class="mr-xxs" ng-if="!!!caze.extraData.isOwner" uib-tooltip="Shared from another organisation" tooltip-placement="right">
+            <span class="mr-xxs" ng-if="!!!caze.extraData.isOwner" uib-tooltip="Shared from another organisation"
+                tooltip-placement="right">
                 <i class="fa fa-share-square"></i>
             </span>
-            <span class="mr-xxs" ng-if="!!caze.extraData.isOwner" uib-tooltip="Created by my organisation" tooltip-placement="right">
+            <span class="mr-xxs" ng-if="!!caze.extraData.isOwner" uib-tooltip="Created by my organisation"
+                tooltip-placement="right">
                 <i class="fa fa-building-o"></i>
             </span>
             <span class="wrap">Case #
@@ -37,11 +39,13 @@
             <span><i class="fa fa-calendar-times-o"></i></span>
             <span>{{caze.endDate | shortDate}} as </span>
             <strong>{{CaseResolutionStatus[caze.resolutionStatus]}}</strong>
-            <span ng-show="isCaseTruePositive()"> with <strong>{{caze.impactStatus === 'NoImpact' ? 'No Impact' : 'Impact'}}</strong></span>
+            <span ng-show="isCaseTruePositive()"> with <strong>{{caze.impactStatus === 'NoImpact' ? 'No Impact' :
+                    'Impact'}}</strong></span>
         </span>
 
         <span class="ml-xxs" ng-switch="caze.status">
-            <case-duration ng-switch-when="Resolved" start="caze.startDate" end="caze.endDate" icon="fa-clock-o"></case-duration>
+            <case-duration ng-switch-when="Resolved" start="caze.startDate" end="caze.endDate"
+                icon="fa-clock-o"></case-duration>
             <case-duration ng-switch-when="Open" start="caze.startDate" icon="fa-clock-o"></case-duration>
         </span>
 
@@ -49,24 +53,24 @@
             <i class="glyphicon glyphicon-link"></i>
             <strong>
                 <a class="text-danger" href ui-sref="app.case.links({caseId:caze._id})">
-                  <ng-pluralize count="links.length" when="{'one': '1 case', 'other': '{} cases'}"></ng-pluralize>
+                    <ng-pluralize count="links.length" when="{'one': '1 case', 'other': '{} cases'}"></ng-pluralize>
                 </a>
             </strong>
         </span>
 
-        <span class="ml-xxs text-danger" ng-show="alertCount > 0"uib-tooltip="Related to">
+        <span class="ml-xxs text-danger" ng-show="alertCount > 0" uib-tooltip="Related to">
             <i class="glyphicon glyphicon-link"></i>
             <strong>
                 <a class="text-danger" href ui-sref="app.case.alerts({caseId:caze._id})">
-                  <ng-pluralize count="alertCount" when="{'one': '1 alert', 'other': '{} alerts'}"></ng-pluralize>
+                    <ng-pluralize count="alertCount" when="{'one': '1 alert', 'other': '{} alerts'}"></ng-pluralize>
                 </a>
             </strong>
         </span>
 
         <!-- Right side -->
 
-        <div class="pull-right" if-permission="manageCase" allowed="{{userPermissions}}">
-            <span class="ml-xxs pull-right" uib-dropdown ng-if="appConfig.connectors.cortex.enabled" if-permission="manageAction" allowed="{{userPermissions}}">
+        <div class="pull-right">
+            <span class="ml-xxs pull-right" uib-dropdown ng-if="appConfig.connectors.cortex.enabled">
                 <span class="mr-xxs text-primary">|</span>
 
                 <a href class="text-primary noline" ng-click="getCaseResponders(true)">
@@ -94,7 +98,16 @@
                 </ul> -->
             </span>
 
-            <span class="ml-xxs pull-right" ng-if="appConfig.connectors.misp.enabled" if-permission="manageShare" allowed="{{userPermissions}}">
+            <span class="ml-xxs pull-right">
+                <span class="mr-xxs text-primary">|</span>
+                <a href ng-click="exportCaseArchive()" class="text-primary noline"
+                    uib-tooltip="Export Case to password protected ZIP">
+                    <i class="text-primary fa fa-download"></i>
+                    Export ZIP
+                </a>
+            </span>
+
+            <span class="ml-xxs pull-right" ng-if="appConfig.connectors.misp.enabled">
                 <span class="mr-xxs text-primary">|</span>
                 <a href ng-click="exportToMisp()" class="text-primary noline" uib-tooltip="Export case">
                     <i class="text-primary fa fa-share"></i>
@@ -118,7 +131,8 @@
 
             <span class="ml-xxs pull-right" ng-if="!caze.flag || caze.flag == undefined">
                 <a href ng-click="switchFlag()" class="text-muted noline" uib-tooltip="Flag case">
-                    <i class="text-muted fa fa-flag" ng-class="setFlag" ng-mouseout="setFlag='text-muted'" ng-mouseover="setFlag='text-yellow'"></i>
+                    <i class="text-muted fa fa-flag" ng-class="setFlag" ng-mouseout="setFlag='text-muted'"
+                        ng-mouseover="setFlag='text-yellow'"></i>
                     Flag
                 </a>
             </span>
@@ -130,7 +144,9 @@
             </span>
             <span class="ml-xxs pull-right" ng-hide="isCaseClosed()">
                 <a href ng-click="openCloseDialog()" class="text-muted noline" uib-tooltip="Close case">
-                    <i class="text-muted fa fa-check-circle-o" ng-class="CloseCase" ng-mouseout="CloseCase='text-muted glyphicon-ok-circle'" ng-mouseover="CloseCase='text-success glyphicon-ok-sign'"></i>
+                    <i class="text-muted fa fa-check-circle-o" ng-class="CloseCase"
+                        ng-mouseout="CloseCase='text-muted glyphicon-ok-circle'"
+                        ng-mouseover="CloseCase='text-success glyphicon-ok-sign'"></i>
                     Close
                 </a>
             </span>
@@ -158,6 +174,7 @@
 <div class="alert alert-warning text-center" ng-show="caze.mergeInto">
     <h4 class="mb-0">
         This case has been closed as a duplicate and merged into <br>
-        <div class="mt-xs text-primary"><a href ui-sref="app.case.details({caseId: caze.mergeInto})">Case #{{caze.stats.mergeInto.caseId}}: {{caze.stats.mergeInto.title}}</a></div>
+        <div class="mt-xs text-primary"><a href ui-sref="app.case.details({caseId: caze.mergeInto})">Case
+                #{{caze.stats.mergeInto.caseId}}: {{caze.stats.mergeInto.title}}</a></div>
     </h4>
 </div>

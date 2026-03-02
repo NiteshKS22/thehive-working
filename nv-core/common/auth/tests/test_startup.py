@@ -11,29 +11,17 @@ from common.auth.middleware import validate_auth_config
 
 class TestStartupGuardrail(unittest.TestCase):
 
-    @patch('common.auth.middleware.get_config')
-    def test_startup_fails_rs256_no_key(self, mock_config):
+    @patch.dict('os.environ', {'JWT_ALGORITHM': 'RS256', 'JWKS_URL': '', 'JWT_SECRET': '', 'DEV_MODE': 'false'})
+    def test_startup_fails_rs256_no_key(self):
         # Simulate insecure config
-        mock_config.return_value = {
-            "JWT_ALGORITHM": "RS256",
-            "JWKS_URL": "",
-            "JWT_SECRET": "",
-            "DEV_MODE": False
-        }
 
         with self.assertRaises(RuntimeError) as cm:
             validate_auth_config()
-        self.assertIn("CRITICAL: RS256 requires JWKS/PublicKey", str(cm.exception))
+        self.assertIn("RS256 requires OIDC_ISSUER and JWKS_URL.", str(cm.exception))
 
-    @patch('common.auth.middleware.get_config')
-    def test_startup_passes_hs256(self, mock_config):
+    @patch.dict('os.environ', {'JWT_ALGORITHM': 'HS256', 'JWKS_URL': '', 'JWT_SECRET': 'some-secret', 'DEV_MODE': 'true'})
+    def test_startup_passes_hs256(self):
         # Simulate valid HS256 config
-        mock_config.return_value = {
-            "JWT_ALGORITHM": "HS256",
-            "JWKS_URL": "",
-            "JWT_SECRET": "some-secret",
-            "DEV_MODE": False
-        }
         # Should not raise
         validate_auth_config()
 

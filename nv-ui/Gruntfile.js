@@ -1,4 +1,4 @@
-module.exports = function(grunt) {
+module.exports = function (grunt) {
     'use strict';
 
     // Time how long tasks take. Can help when optimizing build times
@@ -67,8 +67,8 @@ module.exports = function(grunt) {
 
         injector: {
             options: {
-                transform: function(filepath) {
-                    return '<script src="'+filepath.substr(5)+'"></script>';
+                transform: function (filepath) {
+                    return '<script src="' + filepath.substr(5) + '"></script>';
                 }
             },
             local_dependencies: {
@@ -96,7 +96,7 @@ module.exports = function(grunt) {
             livereload: {
                 options: {
                     open: true,
-                    middleware: function(connect) {
+                    middleware: function (connect) {
                         return [
                             serveStatic('.tmp'),
                             connect().use(
@@ -116,7 +116,7 @@ module.exports = function(grunt) {
             test: {
                 options: {
                     port: 9000,
-                    middleware: function(connect) {
+                    middleware: function (connect) {
                         return [
                             serveStatic('.tmp'),
                             serveStatic('test'),
@@ -133,7 +133,7 @@ module.exports = function(grunt) {
                 options: {
                     open: true,
                     base: '<%= yeoman.dist %>',
-                    middleware: function(/*connect*/) {
+                    middleware: function (/*connect*/) {
                         return [
                             serveStatic(appConfig.dist),
                             proxySnippet
@@ -182,7 +182,7 @@ module.exports = function(grunt) {
         postcss: {
             options: {
                 processors: [
-                  //require('autoprefixer')({overrideBrowserslist: ['last 1 version']})
+                    //require('autoprefixer')({overrideBrowserslist: ['last 1 version']})
                 ]
             },
             server: {
@@ -254,7 +254,7 @@ module.exports = function(grunt) {
                 flow: {
                     html: {
                         steps: {
-                            js: ['concat', 'uglifyjs'],
+                            js: ['concat'],
                             css: ['cssmin']
                         },
                         post: {}
@@ -432,9 +432,9 @@ module.exports = function(grunt) {
     });
 
 
-    grunt.registerTask('serve', 'Compile then start a connect web server', function(target) {
+    grunt.registerTask('serve', 'Compile then start a connect web server', function (target) {
         if (target === 'dist') {
-            return grunt.task.run(['build', 'configureProxies:dist','connect:dist:keepalive']);
+            return grunt.task.run(['build', 'configureProxies:dist', 'connect:dist:keepalive']);
         }
 
         grunt.task.run([
@@ -448,7 +448,7 @@ module.exports = function(grunt) {
         ]);
     });
 
-    grunt.registerTask('server', 'DEPRECATED TASK. Use the "serve" task instead', function(target) {
+    grunt.registerTask('server', 'DEPRECATED TASK. Use the "serve" task instead', function (target) {
         grunt.log.warn('The `server` task has been deprecated. Use `grunt serve` to start a server.');
         grunt.task.run(['serve:' + target]);
     });
@@ -464,7 +464,7 @@ module.exports = function(grunt) {
 
     grunt.registerTask('build', [
         'clean:dist',
-        'wiredep',
+        // 'wiredep', // Disabled: strips angular-markdown-editor from bower block
         'injector',
         'useminPrepare',
         'concurrent:dist',
@@ -474,7 +474,7 @@ module.exports = function(grunt) {
         'ngAnnotate',
         'copy:dist',
         'cssmin',
-        'uglify',
+        // 'uglify',
         'filerev',
         'usemin',
         'htmlmin'

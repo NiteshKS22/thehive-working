@@ -13,6 +13,11 @@
                                 {{tab.label}}
                             </span>
 
+                            <span ng-switch-when="pages">
+                                <i class="fa fa-book"></i>&nbsp;&nbsp;
+                                {{tab.label}}
+                            </span>
+
                             <span ng-switch-when="tasks">
                                 <i class="glyphicon glyphicon-tasks"></i>&nbsp;&nbsp;{{tab.label}}&nbsp;&nbsp;
                                 <span class="badge">{{tasksCount}}</span>

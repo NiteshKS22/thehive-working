@@ -4,16 +4,15 @@ angular.module('theHiveServices').factory('NvRouter', function ($http, $q, NvCon
 
   var service = {};
 
-  // Helper to handle fallback
+  // Helper to enforce NV endpoint responses
   function tryNvOrElse(nvPromise, v4FallbackFn) {
-    if (!NvConfig.useNvQueryReads) {
-      return v4FallbackFn();
-    }
-
+    // Phase 7: Full v5 Cutover
+    // Legacy v4 fallbacks are officially deprecated and removed.
+    // The UI must strictly rely on the nv-query microservice.
     return nvPromise.catch(function (err) {
       // 403 Forbidden -> Show Error (Do not fallback)
       if (err.status === 403) {
-        NotificationSrv.error('Permission Denied', 'You do not have permission to view this resource in v5.');
+        NotificationSrv.error('Permission Denied', 'You do not have permission to view this resource.');
         return $q.reject(err);
       }
 
@@ -22,13 +21,7 @@ angular.module('theHiveServices').factory('NvRouter', function ($http, $q, NvCon
         return $q.reject(err);
       }
 
-      // Other Errors (5xx, Timeout, Network) -> Fallback
-      if (NvConfig.fallbackToV4) {
-        console.warn('v5 Query API failed/timed out. Falling back to v4.', err);
-        return v4FallbackFn();
-      }
-
-      // No fallback configured
+      console.error('v5 Query API failed/timed out. Legacy fallback is disabled.', err);
       return $q.reject(err);
     });
   }

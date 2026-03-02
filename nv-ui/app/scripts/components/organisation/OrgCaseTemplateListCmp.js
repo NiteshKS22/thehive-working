@@ -128,7 +128,7 @@
                         pap: 2,
                         tags: [],
                         tasks: [],
-                        customFields: {},
+                        customFields: [],
                         description: ''
                     });
                 };
